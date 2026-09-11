@@ -16,6 +16,8 @@ while true; do
   for f in inbox-*.log; do
     n=$(( $(wc -l < "$f") ))
     prev=${seen[$f]:-0}
+    # A file that shrank was reset by setup.sh; start over so new lines are not skipped.
+    if [ "$n" -lt "$prev" ]; then prev=0; fi
     if [ "$n" -gt "$prev" ]; then
       head -n "$n" "$f" | tail -n +$((prev + 1)) | tr -d '\r' \
         | grep -E --line-buffered 'STATUS|ISSUE|QUESTION|DONE|TO |CLAIM' || true
