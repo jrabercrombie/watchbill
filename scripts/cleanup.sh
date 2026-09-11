@@ -4,7 +4,7 @@
 # Removes .worktrees/<task> and deletes branch <task> if it is fully merged into the current
 # branch. An unmerged branch is kept and reported, so nothing is lost by running this early.
 #
-# Windows note: a folder under OneDrive or one a test runner just used can be locked for a
+# Windows note: a folder a sync client, indexer, or test runner just touched can be locked for a
 # few seconds. If git cannot remove the worktree, this waits, retries, and finally falls back
 # to deleting the folder and pruning git's registration.
 set -uo pipefail
@@ -19,7 +19,7 @@ remove_worktree() {
   sleep 3
   git worktree remove --force "$dir" 2>/dev/null && return 0
   rm -rf "$dir" 2>/dev/null
-  # Git Bash rm can be refused where PowerShell succeeds (OneDrive / handle quirks).
+  # Git Bash rm can be refused where PowerShell succeeds (Windows handle quirks).
   if [ -e "$dir" ] && command -v powershell.exe >/dev/null 2>&1; then
     powershell.exe -NoProfile -Command "Remove-Item -Recurse -Force -LiteralPath '$(cygpath -w "$dir")' -ErrorAction SilentlyContinue" >/dev/null 2>&1
   fi

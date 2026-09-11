@@ -100,7 +100,7 @@ scripts/cleanup.sh        remove worktrees, delete merged branches, prune stale 
 - A shared spec edited by several agents; give it to one, or route notes through files the lead folds in.
 - The Claude browser pane is one shared pane; each agent needs its own tab, and a hidden tab suspends `requestAnimationFrame`.
 - A correction can land between an agent's last checkpoint and its commit; the lead checks the next status and repeats it as a numbered reply if needed.
-- Worktree folders under OneDrive can stay locked after agents finish; cleanup retries and falls back.
+- On Windows, worktree folders can stay locked for a while after agents finish (sync clients, indexers, test runners); cleanup retries and falls back.
 
 ## License
 

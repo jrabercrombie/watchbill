@@ -145,7 +145,7 @@ list for that task, branch already exists). Merge on `DONE`, run the suite again
 bash ~/.claude/skills/watchbill/scripts/cleanup.sh task-a task-b task-c
 ```
 which removes each worktree and deletes each fully-merged branch (it refuses unmerged ones).
-On Windows, a repo under OneDrive can hold worktree folders locked for a while after agents
+On Windows, worktree folders can stay locked for a while after agents
 finish; the script retries and falls back to a plain delete, and stale `.git/worktrees/<task>`
 record folders that survive are harmless once `git worktree list` shows only the main
 checkout. Delete them later by hand if they bother you.
