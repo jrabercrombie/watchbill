@@ -1,5 +1,7 @@
 # watchbill
 
+![The officer of the watch reads a note from the crew's pigeonholes while four deckhands work their own stations](assets/social-preview.jpg)
+
 *Who stands which watch, and who they report to.*
 
 The deckhands do the work, the officer of the watch runs the deck: parallel Claude subagents
