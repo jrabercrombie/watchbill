@@ -113,6 +113,7 @@ scripts/cleanup.sh        remove worktrees, delete merged branches, prune stale 
 - Game engines animate on real time, so an agent that fast-forwards frames in a loop to speed up a check sees every animation freeze and reports a false failure; checks need real delays.
 - A shared spec edited by several agents; give it to one, or route notes through files the lead folds in.
 - The Claude browser pane is one shared pane; each agent needs its own tab, and a hidden tab suspends `requestAnimationFrame`.
+- Six agents on that one pane still thrash it; keep browser-using tasks to two or three per round.
 - A correction can land between an agent's last checkpoint and its commit; the lead checks the next status and repeats it as a numbered reply if needed.
 - On Windows, worktree folders can stay locked for a while after agents finish (sync clients, indexers, test runners); cleanup retries and falls back.
 

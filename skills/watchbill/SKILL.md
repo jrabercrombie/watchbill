@@ -170,6 +170,9 @@ open.
 - Browser automation tools (the Claude browser pane) are one shared pane for every agent in
   the session. The template already tells agents to create their own tab and never touch
   another's; an agent that ignores this navigates a peer's tab mid-measurement.
+  With five or six agents the pane still thrashes (tabs swapped, screenshots timing out), so
+  plan rounds so that at most two or three tasks need the browser, give pure-module tasks
+  "no runtime evidence needed", and tell agents to pass their tab id on every single call.
 - A background browser tab suspends `requestAnimationFrame`, so an engine's update loop never
   runs there even though scene creation did. The template tells agents to front the tab or
   drive the update function themselves with real time deltas. Expect the report to say which.
