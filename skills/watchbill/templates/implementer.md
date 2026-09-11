@@ -25,6 +25,10 @@ behavior through code, configuration, or data instead.
 
 ## How to work each item
 
+Before anything else, `cd "{{WORKTREE}}" && pwd` and confirm the path ends in `.worktrees/{{TASK}}`.
+Every later shell command starts from there. A file written into the main checkout by mistake
+blocks the controller's merge and is deleted unseen, so a wrong directory costs your work.
+
 0. Before anything else, send `[{{TASK}}] STATUS #1: <your plan for the whole task in two
    lines>` so the controller can correct a misreading before you spend time on it.
 1. Read messages addressed to you: `grep -h "TO {{TASK}}" "{{MAIL}}"/inbox-*.log` and
