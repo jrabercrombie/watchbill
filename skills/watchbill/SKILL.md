@@ -70,6 +70,8 @@ port, model, and items. If two tasks need the same file, either combine them int
 give the file to one task and let the other log an `ISSUE` describing the change it wanted.
 
 ### 2. Set up the repo
+`<skill-dir>` below is this skill's base directory, reported when the skill was loaded (a
+plugin install puts it under `~/.claude/plugins/`, a clone under `~/.claude/skills/`).
 ```bash
 bash "<skill-dir>/scripts/setup.sh" --setup "npm install" task-a task-b task-c
 ```
