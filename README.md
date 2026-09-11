@@ -115,7 +115,7 @@ scripts/cleanup.sh        remove worktrees, delete merged branches, prune stale 
 - The Claude browser pane is one shared pane; each agent needs its own tab, and a hidden tab suspends `requestAnimationFrame`.
 - Six agents on that one pane still thrash it; keep browser-using tasks to two or three per round.
 - A correction can land between an agent's last checkpoint and its commit; the lead checks the next status and repeats it as a numbered reply if needed.
-- On Windows, worktree folders can stay locked for a while after agents finish (sync clients, indexers, test runners); cleanup retries and falls back.
+- Agents report "server stopped" when it is not; the leftover process locks the worktree folder and squats on a port. Cleanup stops any process rooted in a worktree before removing it, and the lead checks ports rather than trusting the report.
 
 ## License
 

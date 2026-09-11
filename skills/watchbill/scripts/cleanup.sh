@@ -13,8 +13,21 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)" || exit 1
 cd "$ROOT" || exit 1
 
+# Agents sometimes report a dev server stopped when it is not. A process rooted in the
+# worktree keeps the folder locked and the port busy, so stop such processes first.
+stop_processes_in() {
+  local dir="$1"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    local win; win="$(cygpath -w "$dir" | sed 's/\/\\/g')"
+    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${win}*' } | ForEach-Object { Write-Output ('stopping ' + $_.ProcessId + ': ' + $_.Name); Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>/dev/null
+  elif command -v pkill >/dev/null 2>&1; then
+    pkill -f -- "$dir" 2>/dev/null && echo "stopped processes rooted in $dir"
+  fi
+}
+
 remove_worktree() {
   local dir="$1"
+  stop_processes_in "$(cd "$dir" 2>/dev/null && pwd || echo "$dir")"
   git worktree remove --force "$dir" 2>/dev/null && return 0
   sleep 3
   git worktree remove --force "$dir" 2>/dev/null && return 0
