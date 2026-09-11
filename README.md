@@ -110,7 +110,7 @@ scripts/cleanup.sh        remove worktrees, delete merged branches, prune stale 
 - "Fixed" on unit tests alone while the live behaviour is still broken.
 - Findings held until the final report.
 - Agents quietly investigating or undoing other agents' work instead of reporting it.
-- Engines with wall-clock tweens stall when frames are stepped in a tight loop.
+- Game engines animate on real time, so an agent that fast-forwards frames in a loop to speed up a check sees every animation freeze and reports a false failure; checks need real delays.
 - A shared spec edited by several agents; give it to one, or route notes through files the lead folds in.
 - The Claude browser pane is one shared pane; each agent needs its own tab, and a hidden tab suspends `requestAnimationFrame`.
 - A correction can land between an agent's last checkpoint and its commit; the lead checks the next status and repeats it as a numbered reply if needed.

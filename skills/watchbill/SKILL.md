@@ -162,8 +162,9 @@ open.
 - Behavior bugs need a runtime check, not just a unit test. Ask for the concrete evidence
   that would convince a skeptic: a screenshot, a logged value before and after, a measured
   number.
-- Engines whose animations or tweens run on wall-clock time (Phaser, most game loops) stall
-  when frames are stepped in a tight loop. Drive frames with real delays between them.
+- Game engines animate on real time. An agent that fast-forwards frames in a loop to speed up
+  a check sees every animation freeze and reports a false failure. Checks need real delays
+  between frames.
 - Tell the agent how to start the app on its port and which existing preview config, if any,
   it must not reuse.
 - Browser automation tools (the Claude browser pane) are one shared pane for every agent in
