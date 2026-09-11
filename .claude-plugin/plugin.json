@@ -1,0 +1,14 @@
+{
+  "name": "watchbill",
+  "displayName": "Watchbill",
+  "version": "0.1.0",
+  "description": "Parallel Claude subagents in git worktrees on cheaper models, coordinated by one lead through a file mailbox with live status, corrections, claims, and evidence-checked merges.",
+  "author": {
+    "name": "John Abercrombie",
+    "url": "https://github.com/jrabercrombie"
+  },
+  "homepage": "https://github.com/jrabercrombie/watchbill",
+  "repository": "https://github.com/jrabercrombie/watchbill",
+  "license": "MIT",
+  "keywords": ["skills", "multi-agent", "subagents", "worktrees", "orchestration", "code-review", "cost-optimization"]
+}

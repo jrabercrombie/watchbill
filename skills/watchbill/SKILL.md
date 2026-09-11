@@ -71,7 +71,7 @@ give the file to one task and let the other log an `ISSUE` describing the change
 
 ### 2. Set up the repo
 ```bash
-bash ~/.claude/skills/watchbill/scripts/setup.sh --setup "npm install" task-a task-b task-c
+bash "<skill-dir>/scripts/setup.sh" --setup "npm install" task-a task-b task-c
 ```
 This appends the gitignore lines if missing, creates `.agent-mail/` with `PROTOCOL.md` and
 `watch.sh`, **clears old inbox and reply files** (so the watcher does not replay history),
@@ -142,7 +142,7 @@ with `file:line` and a concrete fix for each FAIL.
 Dispatch fixes to the original task's worktree (same implementer template, items = the FAIL
 list for that task, branch already exists). Merge on `DONE`, run the suite again. Then:
 ```bash
-bash ~/.claude/skills/watchbill/scripts/cleanup.sh task-a task-b task-c
+bash "<skill-dir>/scripts/cleanup.sh" task-a task-b task-c
 ```
 which removes each worktree and deletes each fully-merged branch (it refuses unmerged ones).
 On Windows, worktree folders can stay locked for a while after agents

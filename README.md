@@ -33,12 +33,22 @@ cheaper model does fine. Every rule in the skill is there because one of those h
 
 ## Install
 
-```bash
-git clone https://github.com/jrabercrombie/watchbill.git ~/.claude/skills/watchbill
+As a plugin, inside Claude Code:
+
+```
+/plugin marketplace add jrabercrombie/watchbill
+/plugin install watchbill@watchbill
 ```
 
-The repo root is the skill, so that is the whole install. Claude Code picks it up on the next
-session. Requires git and a bash (Git Bash on Windows is fine).
+Or as a plain skill, by cloning and linking the skill folder:
+
+```bash
+git clone https://github.com/jrabercrombie/watchbill.git
+ln -s "$PWD/watchbill/skills/watchbill" ~/.claude/skills/watchbill
+```
+
+Either way Claude Code picks it up on the next session. Requires git and a bash (Git Bash on
+Windows is fine; use a junction instead of `ln -s` there).
 
 ## Use
 
@@ -76,6 +86,8 @@ Every line starts with `[<task>]`. Each agent owns exactly one append-only file,
 Nothing waits on another agent, so there is no deadlock.
 
 ## Files
+
+The plugin manifest lives in `.claude-plugin/`; everything else is under `skills/watchbill/`:
 
 ```
 SKILL.md                  workflow, rules, controller loop, checklist
