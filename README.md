@@ -62,7 +62,9 @@ lead session then:
 2. Runs `scripts/setup.sh --setup "npm install" task-a task-b task-c`, which adds the
    gitignore lines, resets `.agent-mail/`, and creates `.worktrees/<task>` on branch `<task>`.
 3. Starts a persistent monitor on `.agent-mail/watch.sh`.
-4. Dispatches every implementer in one message from `templates/implementer.md`.
+4. Dispatches every implementer in one message with a short brief of values; each agent reads
+   `templates/implementer.md` from the skill folder itself, so the expensive lead model never
+   pays to retype the contract.
 5. Answers each `STATUS` with `ACK` or a correction, answers `QUESTION`s, notes `ISSUE`s.
 6. Merges each branch when its report lands and runs the suite on the merged tree.
 7. Sends a reviewer from `templates/reviewer.md`, dispatches fixes, merges again.
@@ -93,7 +95,8 @@ The plugin manifest lives in `.claude-plugin/`; everything else is under `skills
 
 ```
 SKILL.md                  workflow, rules, controller loop, checklist
-templates/implementer.md  prompt for an implementing agent (Sonnet or Haiku)
+templates/dispatch-brief.md  the short brief the lead sends (values only)
+templates/implementer.md  contract an implementing agent reads from disk (Sonnet or Haiku)
 templates/reviewer.md     prompt for the read-only batch reviewer
 templates/merge-agent.md  prompt for resolving a large merge conflict in the task's worktree
 mailbox/PROTOCOL.md       the mailbox contract, copied into each repo

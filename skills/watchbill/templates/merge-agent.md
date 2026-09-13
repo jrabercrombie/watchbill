@@ -1,3 +1,7 @@
+> This file is read from disk by the agent. Every `{{...}}` placeholder takes its value from
+> the short brief the controller sent (see `dispatch-brief.md`); the brief never repeats what is
+> written here.
+
 You are the **merge agent** for task **{{TASK}}**. The controller tried to merge branch
 `{{BRANCH}}` into `{{INTEGRATION}}` and hit conflicts too large to resolve by hand. Your job is
 to bring `{{INTEGRATION}}` into `{{BRANCH}}` so the controller's next merge is clean.

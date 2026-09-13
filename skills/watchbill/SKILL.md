@@ -28,8 +28,8 @@ mechanically.
 | Merge agent | `sonnet` | `.worktrees/<task>` | conflict resolution on branch `<task>` |
 
 Dispatch with the Agent tool: `subagent_type: "general-purpose"`, `model: "sonnet"` or
-`"haiku"`, `run_in_background: true`, and the **entire filled template as the prompt**. Do not
-paraphrase the template; the mailbox and evidence paragraphs are the contract.
+`"haiku"`, `run_in_background: true`, and a **short brief that points at the template file** (step 4).
+The template on disk is the contract; the brief only supplies the values.
 
 ## The rules, and what they prevent
 
@@ -88,14 +88,21 @@ Monitor({ command: "bash .agent-mail/watch.sh", description: "agent mailbox", pe
 Each `ISSUE`, `QUESTION`, `DONE`, `TO`, and `CLAIM` line arrives as a notification.
 
 ### 4. Dispatch
-Fill `templates/implementer.md` per task and launch all Agent calls **in one message** so they
-run concurrently. Placeholders: `{{TASK}}`, `{{BRANCH}}`, `{{WORKTREE}}`, `{{MAIL}}`,
-`{{INTEGRATION}}`, `{{PORT}}`, `{{ALLOWLIST}}`, `{{OTHER_TASKS}}`, `{{ITEMS}}`, `{{TEST_CMD}}`,
-`{{TYPECHECK_CMD}}`, `{{BUILD_CMD}}`, `{{DEV_CMD}}`, `{{RUNTIME_NOTES}}`. Put project-specific
-verification advice (see "Runtime verification notes") into `{{RUNTIME_NOTES}}`, and paste the
-task's items from the plan verbatim into `{{ITEMS}}` together with the evidence the item must
-produce. Name the read-only context files (shared types, the spec, the plan) next to the
-allowlist so the agent knows what to read without claiming it.
+Do not paste the template into the prompt. The lead model's output is the most expensive
+token in the system, and a full template per agent was the single largest line in a real
+run's bill. Instead send each agent a short **brief**: the values that fill the template, plus
+one instruction to read the template file itself. `templates/dispatch-brief.md` is the shape;
+copy it, fill it, and launch all Agent calls **in one message** so they run concurrently.
+
+The brief carries: `TASK`, `BRANCH`, `WORKTREE`, `MAIL`, `INTEGRATION`, `PORT`, the allowlist,
+the read-only context files, `OTHER_TASKS`, the items pasted verbatim from the plan with the
+evidence each must produce, the test / typecheck / build / dev commands, and the runtime notes
+(see "Runtime verification notes"). The agent reads `<skill-dir>/templates/implementer.md`,
+substitutes the `{{...}}` placeholders from the brief, and follows it. Reviewers and merge
+agents get the same treatment with `templates/reviewer.md` and `templates/merge-agent.md`.
+
+Keep the brief itself lean: items and evidence in full, everything else one line each. What
+the template already says (mailbox rules, evidence rules, report format) is never repeated.
 
 ### 5. Handle mailbox lines
 
@@ -209,6 +216,7 @@ commits, and mailbox lines do. On resume:
 
 ## Files in this skill
 
-- `templates/implementer.md`, `templates/reviewer.md`, `templates/merge-agent.md`
+- `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
+  `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
 - `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`)
 - `scripts/setup.sh`, `scripts/cleanup.sh`

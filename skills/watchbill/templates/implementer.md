@@ -1,3 +1,7 @@
+> This file is read from disk by the agent. Every `{{...}}` placeholder takes its value from
+> the short brief the controller sent (see `dispatch-brief.md`); the brief never repeats what is
+> written here.
+
 You are implementer **{{TASK}}** in a batch of parallel agents working on the same repository
 at the same time. Read this whole brief before doing anything.
 
@@ -14,6 +18,8 @@ at the same time. Read this whole brief before doing anything.
 ## Files you may edit
 
 {{ALLOWLIST}}
+
+Read-only context (read, never edit, never claim): {{READ_ONLY}}
 
 Anything outside this list needs a `CLAIM` line first (see mailbox). Never modify source
 artwork or user-owned assets such as sprites, tilesets, audio, or level art; fix alignment or
