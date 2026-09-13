@@ -157,6 +157,22 @@ Apply any ISSUE-listed edits that were skipped because of claims, fold `docs/not
 into the shared doc, and tell the user what merged, what the reviewer found, and what is still
 open.
 
+## Resuming after a session restart
+
+Background agents and the watcher do not survive a session restart, but their worktrees,
+commits, and mailbox lines do. On resume:
+
+1. `git worktree list` and `git log main..<task>` for each task: the branch shows what landed;
+   the mailbox `DONE` lines say which items those commits were.
+2. Check the worktree is clean and no stray servers hold ports (`netstat -ano | grep LISTENING`).
+3. Restart the Monitor on `watch.sh`. It replays the whole inbox once because its line
+   counters start fresh; read the replay as history, not as new events.
+4. A stopped agent cannot be messaged back to life. Dispatch a fresh one with the same brief
+   plus a paragraph naming the commits already on the branch and the item to start from, and
+   tell it to number its statuses after the last one in the inbox.
+5. Merge finished branches as usual; a branch whose agent died mid-item is still safe to merge
+   if its last commit was green, which the rules guarantee.
+
 ## Runtime verification notes (project-specific advice for `{{RUNTIME_NOTES}}`)
 
 - Behavior bugs need a runtime check, not just a unit test. Ask for the concrete evidence
