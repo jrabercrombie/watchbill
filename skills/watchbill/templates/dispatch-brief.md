@@ -1,5 +1,5 @@
-You are implementer **{{TASK}}** in a round of parallel agents on the same repository. Your full
-contract is in a file. Before anything else:
+You are implementer **{{TASK}}**, one of one or more implementers on the same repository this
+round. Your full contract is in a file. Before anything else:
 
 1. Read `{{SKILL_DIR}}/templates/implementer.md` in full.
 2. Treat every `{{...}}` placeholder in it as the matching value below, and follow that file
@@ -18,7 +18,7 @@ contract is in a file. Before anything else:
 - TEST_CMD: {{TEST_CMD}}
 - TYPECHECK_CMD: {{TYPECHECK_CMD}}
 - BUILD_CMD: {{BUILD_CMD}}
-- OTHER_TASKS: {{OTHER_TASKS}}
+- OTHER_TASKS: {{OTHER_TASKS}} (write `none` when this is the only implementer)
 
 ## ALLOWLIST
 

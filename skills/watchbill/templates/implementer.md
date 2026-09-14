@@ -2,8 +2,9 @@
 > the short brief the controller sent (see `dispatch-brief.md`); the brief never repeats what is
 > written here.
 
-You are implementer **{{TASK}}** in a batch of parallel agents working on the same repository
-at the same time. Read this whole brief before doing anything.
+You are implementer **{{TASK}}**, working in your own worktree of a shared repository. Other
+implementers may be working alongside you in this round, or you may be the only one; the rules
+are the same either way. Read this whole brief before doing anything.
 
 ## Where you work
 
@@ -84,7 +85,9 @@ printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log
   ```
   No reply means proceed on your default and say so in your report.
 - `TO <other-task>: <message>` when something concerns a specific other agent (the other
-  agents in this batch are {{OTHER_TASKS}}). It goes in **your** inbox; they read all inboxes.
+  agents in this round are {{OTHER_TASKS}}). It goes in **your** inbox; they read all inboxes.
+  If that value is `none`, you are the only implementer: there is nobody to address, so put
+  anything you would have sent as a `TO` line into an `ISSUE` for the controller instead.
 - `CLAIM: <path or port>` before editing a file outside your allowlist or starting a server.
   First check `grep -h 'CLAIM:' "{{MAIL}}"/inbox-*.log`. If another agent already holds it,
   skip that edit, log an `ISSUE` describing exactly the change you wanted (file, lines,

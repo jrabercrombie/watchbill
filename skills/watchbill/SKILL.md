@@ -1,9 +1,9 @@
 ---
 name: watchbill
-description: Run an implementation plan or bug list as parallel subagents, each in its own git worktree, coordinated through a file mailbox (.agent-mail/) instead of agent-teams messaging. Use this whenever a plan, spec, or bug list contains two or more tasks that could be worked at the same time in a git repo and the user wants them dispatched to subagents, reviewed, and merged; also whenever the user mentions worktrees, parallel agents, dispatching implementers, watchbill, an agent mailbox, .agent-mail, batches of tasks, or wants cheaper models doing the implementation while this session only coordinates. Even if the user just says "run the plan" or "fix these bugs" and there are several independent items, use this skill.
+description: Dispatch implementation work to subagents in a git repo, each in its own git worktree, coordinated through a file mailbox (.agent-mail/) with an independent reviewer, no agent-teams messaging needed. Use this whenever any implementation task, one or many, is being handed to a subagent in a git repo: a single bug fix, one feature, or a whole plan; parallelism is a bonus when there are several tasks, not the reason to use it. Also use it whenever the user mentions worktrees, parallel agents, dispatching implementers, watchbill, an agent mailbox, .agent-mail, batches of tasks, or wants cheaper models doing the implementation while this session only coordinates. Even if the user just says "run the plan" or "fix these bugs" and there are several independent items, use this skill.
 ---
 
-# Watchbill: parallel agents with a file mailbox
+# Watchbill: implementers in worktrees with a file mailbox
 
 This session is the **controller**. It dispatches subagents, watches a mailbox, answers
 questions, merges, and decides. It does not implement, and it never reads agent transcripts,
@@ -13,10 +13,15 @@ mechanically.
 
 ## When to use
 
-- Two or more tasks that can be partitioned by file so they do not need each other's edits.
+- Any implementer dispatch in a git repo, including a single task. The value is the mailbox (a
+  `STATUS` before each item that the controller acknowledges or corrects before the first
+  commit), the worktree (half-finished edits never hot-reload into the main checkout), and the
+  independent reviewer. A bare Agent call has none of those, and a one-task job once went out
+  that way because this section said the skill was only for parallel work.
+- With several tasks, partition them by file so they do not need each other's edits; tasks that
+  all touch the same few files are serialized or given to one agent. Running them at the same
+  time is the bonus, not the requirement.
 - A git repo, and a session that stays alive to run a persistent watcher.
-- Not for a single task, or a set of tasks that all touch the same few files (serialize those
-  or give them to one agent).
 
 ## Roles and models
 
@@ -65,9 +70,11 @@ The template on disk is the contract; the brief only supplies the values.
 ## Controller loop
 
 ### 1. Partition
-Group the plan's items into tasks with disjoint file sets. For each task decide the allowlist,
-port, model, and items. If two tasks need the same file, either combine them into one task or
-give the file to one task and let the other log an `ISSUE` describing the change it wanted.
+Group the plan's items into tasks with disjoint file sets. With one task the partition is
+trivial: one allowlist, one port, one model; still write them down, the brief needs them. For
+each task decide the allowlist, port, model, and items. If two tasks need the same file, either
+combine them into one task or give the file to one task and let the other log an `ISSUE`
+describing the change it wanted.
 
 ### 2. Set up the repo
 `<skill-dir>` below is this skill's base directory, reported when the skill was loaded (a
@@ -180,6 +187,12 @@ commits, and mailbox lines do. On resume:
 5. Merge finished branches as usual; a branch whose agent died mid-item is still safe to merge
    if its last commit was green, which the rules guarantee.
 
+### Single task
+Same steps, one worktree, one implementer, and still a reviewer. `setup.sh` and `cleanup.sh`
+take one task name as happily as six. The only things that fall away are partitioning and
+merge ordering; the mailbox, the acknowledged statuses, the evidence rules, and the review are
+the reason to run the skill at all, and they do not depend on how many agents there are.
+
 ## Runtime verification notes (project-specific advice for `{{RUNTIME_NOTES}}`)
 
 - Behavior bugs need a runtime check, not just a unit test. Ask for the concrete evidence
@@ -204,10 +217,10 @@ commits, and mailbox lines do. On resume:
 
 ## Checklist
 
-- [ ] Tasks partitioned; every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files
+- [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files
 - [ ] `setup.sh` run; old inboxes cleared; worktrees exist; setup command succeeded in each
 - [ ] Monitor started on `watch.sh`, persistent
-- [ ] All implementers dispatched in one message with full templates, unique ports, cheap models
+- [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, a cheap model
 - [ ] Every STATUS answered with ACK or a correction; every QUESTION answered, or its default accepted consciously
 - [ ] Each DONE merged; suite, typecheck, and build run on the merged tree
 - [ ] Reviewer dispatched on the batch, told not to trust reports

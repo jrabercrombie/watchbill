@@ -54,11 +54,11 @@ Windows is fine; use a junction instead of `ln -s` there).
 
 ## Use
 
-In a repo with a plan or bug list that has two or more tasks touching different files, say
-something like *"run docs/plans/batch-1.md with watchbill"* or just *"use watchbill"*. The
-lead session then:
+Whenever an implementation task, one or many, is about to be handed to a subagent in a git
+repo, say something like *"run docs/plans/batch-1.md with watchbill"*, *"fix this bug with
+watchbill"*, or just *"use watchbill"*. The lead session then:
 
-1. Partitions the plan into tasks with disjoint file allowlists.
+1. Partitions the plan into tasks with disjoint file allowlists (one task is a valid partition).
 2. Runs `scripts/setup.sh --setup "npm install" task-a task-b task-c`, which adds the
    gitignore lines, resets `.agent-mail/`, and creates `.worktrees/<task>` on branch `<task>`.
 3. Starts a persistent monitor on `.agent-mail/watch.sh`.
