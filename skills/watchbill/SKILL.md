@@ -27,13 +27,35 @@ mechanically.
 
 | Role | Model | Where it works | Writes |
 |------|-------|----------------|--------|
-| Controller (you) | the session's model | main checkout on the integration branch | only `.agent-mail/<task>.reply` files, merges, worktree cleanup |
-| Implementer | `sonnet` (`haiku` for trivial edits such as doc nits, renames, config) | `.worktrees/<task>` on branch `<task>` | its allowlist, its own `inbox-<task>.log` |
-| Reviewer | `sonnet` | main checkout, read-only | its own `inbox-review-<batch>.log` only |
-| Merge agent | `sonnet` | `.worktrees/<task>` | conflict resolution on branch `<task>` |
+| Controller (you) | the session's model | main checkout on the integration branch | only `.agent-mail/<task>.reply` files, staging merges, worktree cleanup |
+| Implementer | chosen per task (below) | `.worktrees/<task>` on branch `<task>` | its allowlist, its own `inbox-<task>.log` |
+| Reviewer | the strongest model you can afford: `opus`, or `fable` for a high-stakes batch | main checkout, read-only | its own `inbox-review-<batch>.log` only |
+| Merge agent | same as the task's implementer | `.worktrees/<task>` | conflict resolution on branch `<task>` |
 
-Dispatch with the Agent tool: `subagent_type: "general-purpose"`, `model: "sonnet"` or
-`"haiku"`, `run_in_background: true`, and a **short brief that points at the template file** (step 4).
+**Choose the model per task, not per round.** The brief carries a model for each task, so
+decide it in the partition step:
+
+- `opus` (Claude Opus 5.5) for judgment-heavy work: multi-file engine changes, gameplay feel,
+  anything visual, a brief that cannot fully specify the answer. A stronger implementer
+  finishes in fewer turns and fewer fix rounds, and one avoided fix round (an implementer
+  dispatch plus a reviewer pass) pays for its price gap over Sonnet.
+- `sonnet` for well-specified work: a single-file fix with a clear test, data encoding, config.
+- `haiku` for trivial edits: doc nits, renames.
+- Reviewer: the strongest model you can afford. Review is cheaper than implementation (one
+  pass over a merged tree, no fix rounds) and a strong reviewer catches more. `opus` by
+  default; `fable` (Claude Fable 5.1) when the batch is large or a miss would be expensive.
+  Its independence comes from a fresh context and the "do not trust the reports" rule, not
+  from being a different model than the implementer.
+- Controller: this session's model. Coordination is the smallest share of the spend and a
+  misjudgment there costs the most.
+
+Opus 5.5 defaults to `medium` effort; pass a higher effort explicitly for implementation with
+runtime verification, or it will under-think exactly the tasks it was chosen for. A run of
+three Opus agents still produced tests that could not fail, a false alarm from a headless
+capture, and a commit made past a scope change; the model does not replace the rules above.
+
+Dispatch with the Agent tool: `subagent_type: "general-purpose"`, `model` per the task,
+`run_in_background: true`, and a **short brief that points at the template file** (step 4).
 The template on disk is the contract; the brief only supplies the values.
 
 ## The rules, and what they prevent
@@ -50,7 +72,13 @@ The template on disk is the contract; the brief only supplies the values.
    with described evidence for any behavior change (screenshots, logged values, measured
    numbers); a "Deviations and concerns" section; an "Issues found" section; proof that
    temporary hooks and scratch files are gone. Agents have said "fixed" on unit tests alone
-   while the live behavior was still broken.
+   while the live behavior was still broken. Three refinements from later runs: test counts
+   are the runner's final line pasted verbatim (a report said 15 new tests, the runner said
+   13); every new test comes with a mutation proof, shown failing against a deliberate break
+   of the code it guards (the reviewer kept finding tests that could not fail); and any claim
+   about how something looks needs a windowed capture the agent opened and described
+   honestly, because headless renderers return placeholder data that has produced both a
+   false alarm and a flawed capture called "correct".
 5. **Findings go out immediately, and so does intent.** An `ISSUE` line the moment something is
    noticed, not in the final report thirty minutes later. A `STATUS` line before each item
    saying how it will be done, which the controller acknowledges or corrects. A wrong reading
@@ -60,12 +88,34 @@ The template on disk is the contract; the brief only supplies the values.
    around it without a message from the controller or the owning agent. No message means
    proceed as briefed.
 7. **Nothing waits on another agent.** Claims are notices, not locks. Questions carry a default
-   assumption and a time limit. So there is no deadlock.
+   assumption and a time limit. So there is no deadlock. The one bounded exception is an
+   **exclusive resource** (rule 11).
 8. **Independent reviewer.** After each batch a read-only reviewer is told not to trust the
    implementer reports and to verify by reading code and running commands.
 9. **One writer per shared document.** A spec that several agents would edit goes to one
    agent per batch, or each agent writes `docs/notes/<task>.md` and the controller folds the
    notes in afterwards.
+10. **One scratch folder per agent.** The session scratchpad is shared by every subagent, so
+    each agent works only in `<scratchpad>/<task>/` and deletes only inside it. One agent's
+    cleanup once deleted another's helper scripts mid-run. Reviewers never put probe files in
+    the repository; a probe test dropped into the test folder hung the controller's suite run.
+11. **Exclusive resources are locked, briefly.** A single GPU window, a device, a license seat:
+    the controller lists them in the brief, agents take `.agent-mail/locks/<resource>`
+    immediately before use and release immediately after, a lock older than 10 minutes is
+    stale, and nobody holds one while waiting for anything else. Before this, agents sharing
+    one capture window "waited 30 s and retried" into each other and produced garbage.
+12. **Instructions must be seen before they matter.** Agents read the reply file in the same
+    shell command as every commit and before any step longer than five minutes; every
+    `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
+    numbered reply to the agent's latest status, never as a bare NOTE; `NOTE@HH:MM: PAUSE`
+    means finish the step, commit green work, skip the rest, report. Agents have committed
+    seconds after a scope change landed because their last read was at the start of the item.
+13. **Merge through a staging branch.** Two branches that each passed alone once produced a
+    failing integration branch when merged, and undoing the merge needed a `git reset --hard`
+    the safety system refused. Merges land in a staging worktree, the suite runs there, and
+    integration fast-forwards only when green.
+14. **The controller never `cd`s.** A `cd` into a worktree moved the session's working
+    directory and every later relative path with it. Use `git -C <path>` and absolute paths.
 
 ## Controller loop
 
@@ -74,7 +124,8 @@ Group the plan's items into tasks with disjoint file sets. With one task the par
 trivial: one allowlist, one port, one model; still write them down, the brief needs them. For
 each task decide the allowlist, port, model, and items. If two tasks need the same file, either
 combine them into one task or give the file to one task and let the other log an `ISSUE`
-describing the change it wanted.
+describing the change it wanted. List every **exclusive resource** (one GPU window for
+captures, a device, a seat) by name; agents lock those and only those.
 
 ### 2. Set up the repo
 `<skill-dir>` below is this skill's base directory, reported when the skill was loaded (a
@@ -83,16 +134,30 @@ plugin install puts it under `~/.claude/plugins/`, a clone under `~/.claude/skil
 bash "<skill-dir>/scripts/setup.sh" --setup "npm install" task-a task-b task-c
 ```
 This appends the gitignore lines if missing, creates `.agent-mail/` with `PROTOCOL.md` and
-`watch.sh`, **clears old inbox and reply files** (so the watcher does not replay history),
-creates `.worktrees/<task>` on branch `<task>` from the current branch, and runs the optional
-setup command in each worktree. It prints the absolute mailbox path and each worktree path for
-the templates. Run it from the repo root on the integration branch.
+`watch.sh`, **clears old inbox, reply, lock, and watcher-state files**, creates
+`.worktrees/<task>` on branch `<task>` from the current branch, and runs the optional setup
+command in each worktree. It prints the absolute mailbox path and each worktree path for the
+templates. Run it from the repo root on the integration branch.
+
+It **refuses** when the mailbox looks live (an inbox or reply written in the last 30 minutes,
+or task folders under `.worktrees/`). A reset run mid-round to add one task once wiped every
+agent's inbox and reply file and an agent lost two instructions. To add a task while agents
+are running:
+```bash
+bash "<skill-dir>/scripts/setup.sh" --add --setup "npm install" task-d
+```
+which creates only the new worktree and its empty inbox and reply files. `--force` overrides
+the refusal when you know nothing is running.
 
 ### 3. Start the watcher
 ```
 Monitor({ command: "bash .agent-mail/watch.sh", description: "agent mailbox", persistent: true, timeout_ms: 3600000 })
 ```
-Each `ISSUE`, `QUESTION`, `DONE`, `TO`, and `CLAIM` line arrives as a notification.
+Each `ISSUE`, `QUESTION`, `DONE`, `TO`, and `CLAIM` line arrives as a notification. The
+watcher saves its per-file offsets in `.agent-mail/.watch-state`, so when the Monitor expires
+(every 30 minutes) and you re-arm it, it continues from where it stopped. It used to replay
+the whole inbox on every restart, and each replay read as a flood of new events. Pass
+`--replay` only when you want the history, such as when resuming after a session restart.
 
 ### 4. Dispatch
 Do not paste the template into the prompt. The lead model's output is the most expensive
@@ -101,8 +166,10 @@ run's bill. Instead send each agent a short **brief**: the values that fill the 
 one instruction to read the template file itself. `templates/dispatch-brief.md` is the shape;
 copy it, fill it, and launch all Agent calls **in one message** so they run concurrently.
 
-The brief carries: `TASK`, `BRANCH`, `WORKTREE`, `MAIL`, `INTEGRATION`, `PORT`, the allowlist,
-the read-only context files, `OTHER_TASKS`, the items pasted verbatim from the plan with the
+The brief carries: `TASK`, `BRANCH`, `WORKTREE`, `MAIL`, `INTEGRATION`, `PORT`, `SCRATCH`
+(this session's scratchpad directory, from your system prompt; each agent uses only
+`<scratchpad>/<task>/`), `EXCLUSIVE` (the lock-file resources, or `none`), the allowlist, the
+read-only context files, `OTHER_TASKS`, the items pasted verbatim from the plan with the
 evidence each must produce, the test / typecheck / build / dev commands, and the runtime notes
 (see "Runtime verification notes"). The agent reads `<skill-dir>/templates/implementer.md`,
 substitutes the `{{...}}` placeholders from the brief, and follows it. Reviewers and merge
@@ -124,35 +191,63 @@ the template already says (mailbox rules, evidence rules, report format) is neve
 | `DONE ALL` | The final report is about to arrive. Merge (step 6) when the agent's completion notification lands, not before: the report is what you check for evidence. |
 
 Reply file (the only file the controller writes). Numbered lines answer a status or question
-with that number; `NOTE:` lines are unsolicited instructions. Agents read the file before each
-item, before each commit, after each runtime check, and before the report, and apply any
-correction before their next commit:
+with that number; `NOTE@HH:MM:` lines are unsolicited instructions stamped with the time.
+Agents read the file before each item, in the same command as each commit, before any step
+over five minutes, after each runtime check, and before the report, and list the NOTEs they
+applied in every `STATUS` and `DONE`:
 ```bash
 printf '#1: ACK\n' >> .agent-mail/task-a.reply
 printf '#2: no, keep the bounds in src/types.ts; formation already reads them from there\n' >> .agent-mail/task-a.reply
-printf 'NOTE: formation now owns src/types.ts; do not claim it\n' >> .agent-mail/task-b.reply
+printf 'NOTE@%s: formation now owns src/types.ts; do not claim it\n' "$(date +%H:%M)" >> .agent-mail/task-b.reply
+printf 'NOTE@%s: PAUSE\n' "$(date +%H:%M)" >> .agent-mail/task-c.reply
 ```
+`PAUSE` means: finish the current step, commit what is green, skip the remaining items,
+report. Use it when the plan changes under an agent or the budget is gone; it beats letting
+the agent finish items you will throw away.
 
 Answering statuses is the controller's main job while agents run. Each one is a chance to
 catch a misread brief before it costs an hour, so read the status, not just the prefix. Keep
 replies to one line; an agent that needs more than that needs a new brief, not a longer reply.
-A `NOTE:` can land between an agent's last checkpoint and its commit, so check the next
-`DONE` or `STATUS` for evidence the correction took effect; if it did not, repeat it as a
-numbered reply to that status, which the agent cannot miss.
+**Anything mandatory goes out as a numbered reply to the agent's latest `STATUS`, never as a
+bare NOTE.** A NOTE can land between checkpoints and be missed; a numbered reply is read
+against a status the agent is waiting to hear about. Then check the next `STATUS` or `DONE`:
+each one ends with the NOTEs applied (`applied NOTE@14:02` or `no NOTEs`), so a missing entry
+means the instruction did not land, and you repeat it as a numbered reply. Agents have
+committed with the old scope because a NOTE arrived after their last read.
 
-### 6. Merge on DONE
-Run in the main checkout:
+**Scope changes are broadcast.** When you move an item, or a file, from agent A to agent B,
+tell both, in numbered replies, with the exact file ownership after the change:
 ```bash
-git merge --no-ff task-a -m "merge: task-a"
+printf '#4: item 3 (spawner tuning) moves to task-b; you no longer own src/spawner.ts; skip it\n' >> .agent-mail/task-a.reply
+printf '#2: you now own item 3 (spawner tuning) and src/spawner.ts; task-a has been told\n' >> .agent-mail/task-b.reply
 ```
-then the test, typecheck, and build commands on the merged tree. Small conflicts: resolve
-yourself. Large ones: `git merge --abort`, dispatch `templates/merge-agent.md` for that task,
-merge again on its `DONE`. Keep the worktree until the review is done; fix agents reuse it.
+Told only one side, A keeps the item in its plan and B flags an overlap, and both lose time.
+
+### 6. Merge on DONE, through staging
+Two branches that each passed alone have produced a failing integration branch when merged,
+and undoing a merge in the main checkout needs a `git reset --hard` that the safety system
+refuses. So merge into a staging worktree, test there, and fast-forward integration only when
+green. Never `cd` into it; a `cd` from the controller moved the session's working directory.
+```bash
+git worktree add --force -B integration-staging .worktrees/_staging <integration>
+git -C .worktrees/_staging merge --no-ff task-a -m "merge: task-a"
+git -C .worktrees/_staging merge --no-ff task-b -m "merge: task-b"
+bash -c 'cd .worktrees/_staging && <test cmd> && <typecheck cmd> && <build cmd>'
+git merge --ff-only integration-staging          # in the main checkout, only when green
+```
+If staging is red, nothing has touched integration: fix on the task branch (a fix dispatch),
+or `git worktree remove --force .worktrees/_staging` and start staging again from
+integration. Small conflicts: resolve in the staging worktree with `git -C`. Large ones:
+`git -C .worktrees/_staging merge --abort`, dispatch `templates/merge-agent.md` for that task,
+merge again on its `DONE`. `git merge-tree --write-tree <integration> <task>` previews a
+conflict without touching any checkout. Keep task worktrees until the review is done; fix
+agents reuse them. Remove `_staging` with the other worktrees at cleanup.
 
 ### 7. Review the batch
 When every task in the batch is merged and the merged tree is green, dispatch
-`templates/reviewer.md` (model `sonnet`, read-only, own port). It reports per item PASS/FAIL
-with `file:line` and a concrete fix for each FAIL.
+`templates/reviewer.md` (the strongest model you can afford, read-only, own port, its own
+`SCRATCH` folder, the same `EXCLUSIVE` list). It reports per item PASS/FAIL with `file:line` and a concrete fix for
+each FAIL, repeats at least one mutation proof per item, and pastes the runner's final line.
 
 ### 8. Fix, re-merge, clean up
 Dispatch fixes to the original task's worktree (same implementer template, items = the FAIL
@@ -161,10 +256,10 @@ list for that task, branch already exists). Merge on `DONE`, run the suite again
 bash "<skill-dir>/scripts/cleanup.sh" task-a task-b task-c
 ```
 which removes each worktree and deletes each fully-merged branch (it refuses unmerged ones).
-On Windows, worktree folders can stay locked for a while after agents
-finish; the script retries and falls back to a plain delete, and stale `.git/worktrees/<task>`
-record folders that survive are harmless once `git worktree list` shows only the main
-checkout. Delete them later by hand if they bother you.
+Include `_staging` in the list. On Windows, worktree folders can stay locked for a while
+after agents finish; the script retries quietly, falls back to a plain delete, and ends with
+one summary line. Stale `.git/worktrees/<task>` records it names there are harmless once
+`git worktree list` shows only the main checkout; delete them later by hand if they bother you.
 
 ### 9. Fold in and report
 Apply any ISSUE-listed edits that were skipped because of claims, fold `docs/notes/<task>.md`
@@ -179,8 +274,9 @@ commits, and mailbox lines do. On resume:
 1. `git worktree list` and `git log main..<task>` for each task: the branch shows what landed;
    the mailbox `DONE` lines say which items those commits were.
 2. Check the worktree is clean and no stray servers hold ports (`netstat -ano | grep LISTENING`).
-3. Restart the Monitor on `watch.sh`. It replays the whole inbox once because its line
-   counters start fresh; read the replay as history, not as new events.
+3. Restart the Monitor on `watch.sh --replay` to see the whole history once, read as history,
+   not as new events. Without `--replay` it resumes from `.watch-state` and shows only what
+   arrived after the previous watcher stopped.
 4. A stopped agent cannot be messaged back to life. Dispatch a fresh one with the same brief
    plus a paragraph naming the commits already on the branch and the item to start from, and
    tell it to number its statuses after the last one in the inbox.
@@ -214,22 +310,46 @@ the reason to run the skill at all, and they do not depend on how many agents th
   drive the update function themselves with real time deltas. Expect the report to say which.
 - Pure data tasks (encoding a table, writing config) need no runtime evidence; say so
   explicitly in the brief so the agent does not start a server for nothing.
+- Headless renderers lie. A headless Godot or a renderer without a window returns placeholder
+  data (an empty MultiMesh buffer made a correct copy look broken and an agent raised a false
+  alarm). Any claim about how something looks or where instances are needs a windowed capture
+  the agent opens and describes, flaws included. Say in the notes how to launch windowed on
+  this project, and name the capture window as an `EXCLUSIVE` resource if there is only one.
+- Ask for the runner's final line, not a count. Reports have said "15 new tests" when the
+  runner said 13; the pasted line settles it.
+
+## Windows and OneDrive hazards (put the relevant ones in `{{RUNTIME_NOTES}}`)
+
+- `git stash` is shared across every worktree of a repository, so an agent's stash surfaces in
+  another agent's checkout, and OneDrive has blocked `git stash -u` outright. Agents park work
+  as a WIP commit instead; the templates say so.
+- Python on Windows writes CRLF and the system code page by default and once broke a GDScript
+  file with cp1252 characters. Files are written as UTF-8 with LF; the templates say so.
+- Long paths break temp worktrees and clones. Keep the scratchpad path short if you can, and
+  tell agents to keep their scratch folder names short.
+- OneDrive and indexers hold folders open. `cleanup.sh` expects this and retries; if a
+  worktree will not go, leave it and run cleanup again later rather than fighting it.
+- The controller never `cd`s into a worktree or staging folder; a `cd` moved the session's
+  working directory and every later relative path with it. `git -C <path>` and absolute paths
+  throughout.
 
 ## Checklist
 
-- [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files
-- [ ] `setup.sh` run; old inboxes cleared; worktrees exist; setup command succeeded in each
-- [ ] Monitor started on `watch.sh`, persistent
-- [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, a cheap model
-- [ ] Every STATUS answered with ACK or a correction; every QUESTION answered, or its default accepted consciously
-- [ ] Each DONE merged; suite, typecheck, and build run on the merged tree
+- [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files; exclusive resources named
+- [ ] `setup.sh` run once (reset) at round start; `--add` for any task added mid-round; worktrees exist; setup command succeeded in each
+- [ ] Monitor started on `watch.sh`, persistent; re-armed without `--replay` when it expires
+- [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the model chosen for that task (explicit effort for Opus)
+- [ ] Every STATUS answered with ACK or a correction; every QUESTION answered, or its default accepted consciously; every mandatory instruction sent as a numbered reply; every STATUS/DONE checked for the NOTEs it lists
+- [ ] Scope moves told to both agents with the file ownership
+- [ ] Each DONE merged into staging; suite, typecheck, and build green there before integration fast-forwards
 - [ ] Reviewer dispatched on the batch, told not to trust reports
 - [ ] FAIL items dispatched as fixes, re-merged, re-tested
-- [ ] Worktrees and branches removed; skipped edits and notes folded in; user told what is open
+- [ ] Worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
 
 ## Files in this skill
 
 - `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
   `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
-- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`)
-- `scripts/setup.sh`, `scripts/cleanup.sh`
+- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
+  at run time the mailbox also holds `.watch-state` and `locks/`)
+- `scripts/setup.sh` (reset, `--add`, `--force`), `scripts/cleanup.sh`

@@ -13,7 +13,9 @@ round. Your full contract is in a file. Before anything else:
 - WORKTREE: {{WORKTREE}}
 - INTEGRATION: {{INTEGRATION}}
 - MAIL: {{MAIL}}
+- SCRATCH: {{SCRATCH}} (the session scratchpad; you use only `{{SCRATCH}}/{{TASK}}/`)
 - PORT: {{PORT}}
+- EXCLUSIVE: {{EXCLUSIVE}} (lock-file resources such as `gpu`; write `none` if there are none)
 - DEV_CMD: {{DEV_CMD}}
 - TEST_CMD: {{TEST_CMD}}
 - TYPECHECK_CMD: {{TYPECHECK_CMD}}

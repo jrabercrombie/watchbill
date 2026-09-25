@@ -11,7 +11,8 @@ and evidence-checked merges.
 Watchbill is a [Claude Code skill](https://code.claude.com/docs/en/skills) for running an
 implementation plan as a coordinated crew instead of a single expensive session. The lead
 session, on your best model, does only coordination: it partitions the plan, dispatches
-implementers on Sonnet and trivial edits on Haiku, and never reads a transcript. Each agent
+implementers on the model each task needs (Opus for judgment-heavy work, Sonnet for
+well-specified work, Haiku for trivial edits), and never reads a transcript. Each agent
 works in its own git worktree, branch, and port, with a file allowlist. Coordination runs
 through an append-only file mailbox: every agent posts a status before each step and the lead
 answers it with an acknowledgement or a one-line correction, so a misread brief is caught
@@ -96,7 +97,7 @@ The plugin manifest lives in `.claude-plugin/`; everything else is under `skills
 ```
 SKILL.md                  workflow, rules, controller loop, checklist
 templates/dispatch-brief.md  the short brief the lead sends (values only)
-templates/implementer.md  contract an implementing agent reads from disk (Sonnet or Haiku)
+templates/implementer.md  contract an implementing agent reads from disk (model chosen per task)
 templates/reviewer.md     prompt for the read-only batch reviewer
 templates/merge-agent.md  prompt for resolving a large merge conflict in the task's worktree
 mailbox/PROTOCOL.md       the mailbox contract, copied into each repo

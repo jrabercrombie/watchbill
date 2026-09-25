@@ -10,6 +10,13 @@ to bring `{{INTEGRATION}}` into `{{BRANCH}}` so the controller's next merge is c
 
 - Worktree: `{{WORKTREE}}` on branch `{{BRANCH}}`. Run every command from inside it. Do not
   touch the main checkout or any other worktree. Paths contain spaces; quote them.
+- Scratch: `{{SCRATCH}}/{{TASK}}/` only; the scratchpad is shared with every other agent, so
+  create your folder, keep any scratch copy or helper in it, and delete only inside it when
+  done.
+- Never `git stash`: the stash stack is shared by every worktree of this repository. If you
+  need to park something, make a WIP commit on `{{BRANCH}}`.
+- Write files as UTF-8 with LF line endings; a Windows default wrote CRLF and cp1252 into a
+  source file and broke it.
 - Do not start or stop any server unless a runtime check is unavoidable; if so use port
   **{{PORT}}** and stop it afterwards.
 - Mailbox: `{{MAIL}}`. Your inbox is `{{MAIL}}/inbox-{{TASK}}.log` (the same file the
@@ -20,7 +27,9 @@ to bring `{{INTEGRATION}}` into `{{BRANCH}}` so the controller's next merge is c
   background and proceed on the default). Use question numbers higher than any already in the
   inbox. Send `[{{TASK}}] STATUS #n: <plan>` before you start and one per conflicted file
   saying what you kept and why; the controller answers `#n: ACK` or a correction in the reply
-  file, which you read before committing. Rules: `{{MAIL}}/PROTOCOL.md`.
+  file, which you read in the same shell command as the commit. A `NOTE@HH:MM:` line there
+  is an instruction; `NOTE@HH:MM: PAUSE` means commit what is resolved and green, then report.
+  Rules: `{{MAIL}}/PROTOCOL.md`.
 
 ## Steps
 
@@ -32,7 +41,8 @@ to bring `{{INTEGRATION}}` into `{{BRANCH}}` so the controller's next merge is c
 3. Edit only conflicted files, plus the minimum other changes needed to keep the tree
    compiling (for example a call site that now has a different signature). List every file you
    touched in the report.
-4. Run `{{TEST_CMD}}`, `{{TYPECHECK_CMD}}`, and `{{BUILD_CMD}}`. All must be clean.
+4. Run `{{TEST_CMD}}`, `{{TYPECHECK_CMD}}`, and `{{BUILD_CMD}}`. All must be clean; keep the
+   runner's final summary line for the report.
 5. Commit the merge with an explicit file list (`git add <files>`; never `git add -A`), message
    `merge: {{INTEGRATION}} into {{BRANCH}}`.
 6. Append `[{{TASK}}] DONE ALL: <hash> merged {{INTEGRATION}} into {{BRANCH}}` to your inbox.
@@ -58,11 +68,14 @@ wrong.
 <file — reason>
 
 ## Checks
-Tests: <command> → <result>
+Tests: <command> → <runner's final line verbatim>
 Typecheck: <command> → <result>
 Build: <command> → <result>
 
 ## Deviations and concerns
 
 ## Issues found
+
+## Cleanup proof
+<git status; ls of the scratchpad showing your folder gone>
 ```

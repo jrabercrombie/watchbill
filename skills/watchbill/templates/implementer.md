@@ -11,10 +11,28 @@ are the same either way. Read this whole brief before doing anything.
 - Worktree: `{{WORKTREE}}` on branch `{{BRANCH}}`, created from `{{INTEGRATION}}`. Run every
   command from inside this worktree. Do not touch the main checkout or any other folder under
   `.worktrees/`. Paths contain spaces; quote them.
+- Scratch: `{{SCRATCH}}/{{TASK}}/` and nowhere else. The scratchpad `{{SCRATCH}}` is shared by
+  every agent in this session; one agent's cleanup once deleted another agent's helper
+  scripts. Create your folder first, put every helper, probe, capture, and scratch copy in it,
+  and when you clean up delete **only inside that folder**. Nothing scratch ever goes into the
+  repository.
 - Dev server: start it only with `{{DEV_CMD}}` on port **{{PORT}}**. Stop only servers you
   started. Any other port in use belongs to another agent; leave it alone.
 - Mailbox: `{{MAIL}}` (absolute path, shared by everyone). Rules are in the section below and
   in `{{MAIL}}/PROTOCOL.md`.
+- Exclusive resources: {{EXCLUSIVE}}. Each is used only while you hold its lock file (see
+  mailbox). Everything not listed there is shared freely or claimed, never locked.
+
+## Git and files on this machine
+
+- Never run `git stash`, with or without `-u`. The stash stack is shared by every worktree of
+  this repository, so a stash from one agent surfaces in another's checkout, and a sync client
+  has blocked `git stash -u` outright. Park unfinished work as a WIP commit on your branch
+  instead and squash or amend it before `DONE`.
+- Write source files as UTF-8 with LF line endings. Python on Windows defaults to CRLF and the
+  system code page and once broke a script file with cp1252 characters; open files with
+  `encoding="utf-8", newline="\n"` or use the editor tools.
+- Keep temporary paths short. Long paths under the scratchpad have broken temp worktrees.
 
 ## Files you may edit
 
@@ -40,25 +58,43 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    lines>` so the controller can correct a misreading before you spend time on it.
 1. Read messages addressed to you: `grep -h "TO {{TASK}}" "{{MAIL}}"/inbox-*.log` and
    `cat "{{MAIL}}/{{TASK}}.reply"`. A `#n: ACK` confirms status n; `#n: <anything else>` is a
-   correction you apply before the next commit; a `NOTE:` line changes your brief even if you
-   never asked a question.
-2. Send `[{{TASK}}] STATUS #n: starting <item>: <approach, files, evidence you will collect>`.
+   correction you apply before the next commit; a `NOTE@HH:MM:` line changes your brief even
+   if you never asked a question. `NOTE@HH:MM: PAUSE` means finish the current step, commit
+   what is green, skip every remaining item, and report.
+2. Send `[{{TASK}}] STATUS #n: starting <item>: <approach, files, evidence you will collect>;
+   applied <NOTE@... list, or "no NOTEs">`.
 3. Where the behavior is testable, write or update the test first, watch it fail, then make it
-   pass.
-4. Run `{{TEST_CMD}}` and `{{TYPECHECK_CMD}}`. Both must be clean before every commit.
+   pass. Then prove the test can fail: copy the file it guards into your scratch folder, make
+   a deliberate mutation of the code the test exists to catch (a flipped condition, an
+   off-by-one, a removed call), run the test against the mutation, and record that it failed.
+   Restore the original and record that it passes. A reviewer has repeatedly found new tests
+   that could not fail; the mutation run is how you show yours can.
+4. Run `{{TEST_CMD}}` and `{{TYPECHECK_CMD}}`. Both must be clean before every commit. Copy the
+   runner's own final summary line into your notes for the report; do not count tests by hand.
+   One report claimed 15 new tests when the runner said 13.
 5. For any behavior change, verify at runtime and collect evidence a skeptic would accept: a
    screenshot, a logged value before and after, a measured number. A passing unit test is not
    runtime evidence; agents have reported "fixed" on unit tests alone while the live behavior
-   stayed broken. Then send `[{{TASK}}] STATUS #n: <item> verified: <what you observed, with
-   numbers>`.
-6. Re-read messages addressed to you and your reply file, apply any correction, then commit
-   **only the files you changed for this item** with an explicit list: `git add <file1>
-   <file2>` then `git commit -m "<type>: <what>"`. Never `git add -A` or `git add .`. One
-   commit per item.
-7. Append `[{{TASK}}] DONE: <hash> <item summary>` to your inbox.
+   stayed broken. For anything visual (how something looks, where instances are placed, what
+   rendered), the evidence is a **windowed** capture that you open and describe in your own
+   words. Headless renderers return placeholder data: an empty instance buffer once made a
+   correct scene look broken and an agent raised a false alarm from it. Describe what the
+   capture actually shows, including flaws; an early agent called a flawed capture "correct"
+   and the flaw shipped. Then send `[{{TASK}}] STATUS #n: <item> verified: <what you
+   observed, with numbers>; applied <NOTE list>`.
+6. Re-read your reply file and the `TO` lines **in the same shell command as the commit**,
+   apply any correction, then commit **only the files you changed for this item** with an
+   explicit list:
+   `cat "{{MAIL}}/{{TASK}}.reply"; grep -h "TO {{TASK}}" "{{MAIL}}"/inbox-*.log; git add <file1> <file2> && git commit -m "<type>: <what>"`.
+   If the read shows a new instruction, stop before the commit and apply it first. Never
+   `git add -A` or `git add .`. One commit per item. Agents have committed seconds after a
+   scope change landed because their last read was at the start of the item.
+7. Append `[{{TASK}}] DONE: <hash> <item summary>; applied <NOTE list>` to your inbox.
 
-If ten minutes pass without you writing any line, send a `STATUS` saying what you are doing
-and what is taking the time. Silence is the one thing the controller cannot act on.
+Also re-read the reply file before starting any step you expect to take more than 5 minutes
+(a full suite, a build, a capture session). If ten minutes pass without you writing any line,
+send a `STATUS` saying what you are doing and what is taking the time. Silence is the one
+thing the controller cannot act on.
 
 ## Mailbox protocol
 
@@ -69,9 +105,9 @@ Append with one `printf` per line so lines land whole:
 printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log"
 ```
 
-- `STATUS #n: <what you are about to do and how>` at task start, at the start of each item,
-  after each runtime check, and as a heartbeat. The controller answers each with `#n: ACK` or
-  a correction. Do not wait for it; read replies at your next checkpoint.
+- `STATUS #n: <what you are about to do and how>; applied <NOTE list>` at task start, at the
+  start of each item, after each runtime check, and as a heartbeat. The controller answers
+  each with `#n: ACK` or a correction. Do not wait for it; read replies at your next checkpoint.
 - `ISSUE:` any finding, in or out of scope, **the moment you notice it**. Bugs, stale docs,
   odd data, environment quirks, anything about another agent's work that looks wrong or
   relevant. Do not save findings for the final report; the controller acts on them while you
@@ -93,8 +129,13 @@ printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log
   skip that edit, log an `ISSUE` describing exactly the change you wanted (file, lines,
   intent) so the controller can apply it after merge, and continue. Claims are notices, not
   locks. Never wait on another agent.
-- `DONE: <hash> <summary>` after each commit, and `DONE ALL: <hashes>` once right before
-  your final report.
+- Exclusive resources ({{EXCLUSIVE}}) are the one exception: take `{{MAIL}}/locks/<resource>`
+  with the `lock` function in `{{MAIL}}/PROTOCOL.md` immediately before use, release it
+  immediately after, never hold it while polling for a reply, and treat a lock older than 10
+  minutes as abandoned. If you cannot get it within 10 minutes, send an `ISSUE`, do the rest
+  of your work, and retry last.
+- `DONE: <hash> <summary>; applied <NOTE list>` after each commit, and `DONE ALL: <hashes>;
+  applied <full NOTE list>` once right before your final report.
 
 ## Other people's work
 
@@ -120,11 +161,12 @@ the report which you did.
 
 ## Before the final report
 
-- Remove every temporary hook, debug log, scratch file, and experiment. Run `git status` and
-  `git diff {{INTEGRATION}}...HEAD --stat` and confirm nothing unintended is there.
-- Stop every server you started.
+- Remove every temporary hook, debug log, and experiment from the worktree. Run `git status`
+  and `git diff {{INTEGRATION}}...HEAD --stat` and confirm nothing unintended is there.
+- Delete `{{SCRATCH}}/{{TASK}}/` and nothing else under `{{SCRATCH}}`.
+- Release any lock you still hold. Stop every server you started.
 - Read messages addressed to you and your reply file one last time and act on or report them.
-- Append `[{{TASK}}] DONE ALL: <hashes>` to your inbox.
+- Append `[{{TASK}}] DONE ALL: <hashes>; applied <full NOTE list>` to your inbox.
 
 ## Final report
 
@@ -140,8 +182,10 @@ exactly this structure:
 ## Per item
 ### <item>
 What changed:
-Tests and typecheck: <command> → <result summary>
-Runtime evidence: <what you ran, what you observed, numbers or screenshot paths>
+Tests and typecheck: <command> → <the runner's final summary line, pasted verbatim>
+Mutation proof: <test name> failed against <mutation> (<message>), passed after restore
+Runtime evidence: <what you ran, what you observed, numbers or capture paths, and an honest
+description of each capture including anything that looks wrong>
 
 ## Deviations and concerns
 <anything done differently from the brief, anything you are unsure about>
@@ -153,6 +197,10 @@ Runtime evidence: <what you ran, what you observed, numbers or screenshot paths>
 <each STATUS and QUESTION you sent, the reply received (ACK, correction, or none) and what you
 did about it>
 
+## Notes applied
+<every NOTE@HH:MM line received, what it asked, and the commit where you applied it; or "none">
+
 ## Cleanup proof
-<git status output; confirmation servers are stopped; confirmation scratch files are gone>
+<git status output; confirmation servers are stopped and locks released; `ls "{{SCRATCH}}"`
+showing your folder is gone and other agents' folders untouched>
 ```
