@@ -50,8 +50,12 @@ exclusive resources and runtime notes.
 | Reviewer | the strongest model you can afford: `opus`, or `fable` for a high-stakes batch | main checkout, read-only | its own `inbox-review-<batch>.log` only |
 | Merge agent | same as the task's implementer | `.worktrees/<task>` | conflict resolution on branch `<task>` |
 
-**Choose the model per task, not per round.** The brief carries a model for each task, so
-decide it in the partition step:
+**State the model plan before dispatching, and offer the alternatives.** The brief carries a
+model for each task. Decide it in the partition step using the suggestions below, then, in
+the same message that presents the partition, tell the user which model each task gets and
+why, and offer the other options with their cost implication: the cheaper plan (what it
+risks), the stronger plan (what it costs). The user picks against their budget; a dispatch
+that surprises them on either quality or spend is a failure of this step, not of the model.
 
 - `opus` (Claude Opus 5.5) for judgment-heavy work: multi-file changes, anything subjective
   (look, feel, copy, API shape), a brief that cannot fully specify the answer. A stronger implementer
@@ -66,8 +70,8 @@ decide it in the partition step:
   from being a different model than the implementer.
 - Controller: this session's model. Coordination is the smallest share of the spend and a
   misjudgment there costs the most.
-- A standing preference from the user (for example, every agent on the strongest model)
-  overrides all of the above. Ask once, then put the model in every brief.
+- Whatever the user chooses stands for the round, and a standing preference they state
+  (for example, every agent on the strongest model) stands across rounds without re-asking.
 
 Opus 5.5 defaults to `medium` effort; pass a higher effort explicitly for implementation with
 runtime verification, or it will under-think exactly the tasks it was chosen for. A run of
@@ -387,6 +391,7 @@ the reason to run the skill at all, and they do not depend on how many agents th
 ## Checklist
 
 - [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files; exclusive resources named
+- [ ] Model plan stated per task with the cheaper and stronger alternatives and their cost; user's choice recorded in each brief
 - [ ] `setup.sh` run once (reset) at round start; `--add` for any task added mid-round; worktrees exist; setup command succeeded in each
 - [ ] Monitor started on `watch.sh`, persistent; re-armed without `--replay` when it expires
 - [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the model chosen for that task (explicit effort for Opus)
