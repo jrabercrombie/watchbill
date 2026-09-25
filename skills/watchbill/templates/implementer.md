@@ -54,15 +54,17 @@ Before anything else, `cd "{{WORKTREE}}" && pwd` and confirm the path ends in `.
 Every later shell command starts from there. A file written into the main checkout by mistake
 blocks the controller's merge and is deleted unseen, so a wrong directory costs your work.
 
-0. Before anything else, send `[{{TASK}}] STATUS #1: <your plan for the whole task in two
-   lines>` so the controller can correct a misreading before you spend time on it.
+0. Before anything else, send `[{{TASK}}] STATUS #1 PLAN: <your plan for the whole task in
+   two lines>` so the controller can correct a misreading before you spend time on it.
 1. Read messages addressed to you: `grep -h "TO {{TASK}}" "{{MAIL}}"/inbox-*.log` and
-   `cat "{{MAIL}}/{{TASK}}.reply"`. A `#n: ACK` confirms status n; `#n: <anything else>` is a
+   `cat "{{MAIL}}/{{TASK}}.reply"`. A `#n: ACK` confirms plan n; `#n: <anything else>` is a
    correction you apply before the next commit; a `NOTE@HH:MM:` line changes your brief even
-   if you never asked a question. `NOTE@HH:MM: PAUSE` means finish the current step, commit
-   what is green, skip every remaining item, and report.
-2. Send `[{{TASK}}] STATUS #n: starting <item>: <approach, files, evidence you will collect>;
-   applied <NOTE@... list, or "no NOTEs">`.
+   if you never asked a question; `NOTE@HH:MM (USER): "..."` is the user's own words, act on
+   the quote. `NOTE@HH:MM: PAUSE` means finish the current step, commit what is green, skip
+   every remaining item, and report.
+2. Send `[{{TASK}}] STATUS #n PLAN: starting <item>: <approach, files, evidence you will
+   collect>; applied <NOTE@... list, or "no NOTEs">`. Read the reply to it before this item's
+   first commit; do not wait for it otherwise.
 3. Where the behavior is testable, write or update the test first, watch it fail, then make it
    pass. Then prove the test can fail: copy the file it guards into your scratch folder, make
    a deliberate mutation of the code the test exists to catch (a flipped condition, an
@@ -76,12 +78,14 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    screenshot, a logged value before and after, a measured number. A passing unit test is not
    runtime evidence; agents have reported "fixed" on unit tests alone while the live behavior
    stayed broken. For anything visual (how something looks, where instances are placed, what
-   rendered), the evidence is a **windowed** capture that you open and describe in your own
-   words. Headless renderers return placeholder data: an empty instance buffer once made a
-   correct scene look broken and an agent raised a false alarm from it. Describe what the
-   capture actually shows, including flaws; an early agent called a flawed capture "correct"
-   and the flaw shipped. Then send `[{{TASK}}] STATUS #n: <item> verified: <what you
-   observed, with numbers>; applied <NOTE list>`.
+   rendered, what a user sees), the evidence is a capture from the real environment that you
+   open and describe in your own words. Stubbed environments lie: a headless renderer, a
+   mocked service, or a fake device returns data that looks real (an empty instance buffer
+   once made a correct scene look broken and an agent raised a false alarm from it). Describe
+   what the capture actually shows, including flaws; an early agent called a flawed capture
+   "correct" and the flaw shipped. Then send `[{{TASK}}] STATUS #n PROGRESS: <item> verified:
+   <what you observed, with numbers>; applied <NOTE list>`. No reply is expected to a PROGRESS
+   line.
 6. Re-read your reply file and the `TO` lines **in the same shell command as the commit**,
    apply any correction, then commit **only the files you changed for this item** with an
    explicit list:
@@ -93,8 +97,20 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
 
 Also re-read the reply file before starting any step you expect to take more than 5 minutes
 (a full suite, a build, a capture session). If ten minutes pass without you writing any line,
-send a `STATUS` saying what you are doing and what is taking the time. Silence is the one
-thing the controller cannot act on.
+send a `STATUS #n PROGRESS` saying what you are doing and what is taking the time. Silence is
+the one thing the controller cannot act on.
+
+## Items marked options-first
+
+Some items are subjective (look, feel, wording, an API shape) and the user will want to
+choose. For an item marked `options-first`: build the variants as switchable knobs, produce a
+labelled comparison (screenshots or a table) in your scratch folder, commit with the **old**
+behaviour as the default, and send
+`[{{TASK}}] QUESTION #n PICK: A=<label> B=<label> C=<label>; comparison at <path>; default: keep A (current)`.
+Poll for it like any question while you work on other items; apply the pick before your next
+commit if it arrives, and if it has not arrived by the final report say so and leave the
+knobs in place. Never pick for the user: a single guessed variant was reworked from scratch,
+while three labelled ones were chosen from in one reply.
 
 ## Mailbox protocol
 
@@ -105,9 +121,12 @@ Append with one `printf` per line so lines land whole:
 printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log"
 ```
 
-- `STATUS #n: <what you are about to do and how>; applied <NOTE list>` at task start, at the
-  start of each item, after each runtime check, and as a heartbeat. The controller answers
-  each with `#n: ACK` or a correction. Do not wait for it; read replies at your next checkpoint.
+- `STATUS #n PLAN: <what you are about to do and how>; applied <NOTE list>` at task start and
+  at the start of each item. The controller answers each with `#n: ACK` or a correction; read
+  it before the item's first commit, and do not wait for it otherwise.
+- `STATUS #n PROGRESS: <what you observed or are doing>; applied <NOTE list>` after each
+  runtime check and as a heartbeat. No reply is expected; the controller answers only to
+  correct something.
 - `ISSUE:` any finding, in or out of scope, **the moment you notice it**. Bugs, stale docs,
   odd data, environment quirks, anything about another agent's work that looks wrong or
   relevant. Do not save findings for the final report; the controller acts on them while you

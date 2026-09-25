@@ -25,8 +25,9 @@ to bring `{{INTEGRATION}}` into `{{BRANCH}}` so the controller's next merge is c
   `[{{TASK}}] QUESTION #n: ... default: ...` if a conflict cannot be resolved without a
   decision (then poll `{{MAIL}}/{{TASK}}.reply` for `^#n:` for at most 8 minutes in the
   background and proceed on the default). Use question numbers higher than any already in the
-  inbox. Send `[{{TASK}}] STATUS #n: <plan>` before you start and one per conflicted file
-  saying what you kept and why; the controller answers `#n: ACK` or a correction in the reply
+  inbox. Send `[{{TASK}}] STATUS #n PLAN: <plan>` before you start and a
+  `STATUS #n PROGRESS:` per conflicted file saying what you kept and why; the controller
+  answers the PLAN with `#n: ACK` or a correction, and a PROGRESS only to correct it, in the reply
   file, which you read in the same shell command as the commit. A `NOTE@HH:MM:` line there
   is an instruction; `NOTE@HH:MM: PAUSE` means commit what is resolved and green, then report.
   Rules: `{{MAIL}}/PROTOCOL.md`.

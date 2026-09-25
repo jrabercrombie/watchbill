@@ -22,11 +22,13 @@ checkout. Paths contain spaces; quote them.
 - Exclusive resources ({{EXCLUSIVE}}): take `{{MAIL}}/locks/<resource>` with the `lock`
   function in `{{MAIL}}/PROTOCOL.md` immediately before use and release it right after.
 - Mailbox: `{{MAIL}}`. Your inbox is `{{MAIL}}/inbox-review-{{BATCH}}.log`, append-only, you
-  are its only writer. Send `[review-{{BATCH}}] STATUS #1: <your review plan>` before you
-  start and a `STATUS` after each item's verdict; the controller answers `#n: ACK` or a
-  correction in `{{MAIL}}/review-{{BATCH}}.reply`, which you read before each item and before
-  any step longer than 5 minutes. A `NOTE@HH:MM:` line there is an instruction;
-  `NOTE@HH:MM: PAUSE` means report what you have verified so far and stop. Append
+  are its only writer. Send `[review-{{BATCH}}] STATUS #1 PLAN: <your review plan>` before
+  you start (the controller answers `#n: ACK` or a correction in
+  `{{MAIL}}/review-{{BATCH}}.reply`) and a `STATUS #n PROGRESS:` after each item's verdict
+  (no reply expected). Read the reply file before each item and before any step longer than
+  5 minutes. A `NOTE@HH:MM:` line there is an instruction, `NOTE@HH:MM (USER): "..."` is the
+  user's own words, and `NOTE@HH:MM: PAUSE` means report what you have verified so far and
+  stop. Append
   `[review-{{BATCH}}] ISSUE: ...` the moment you find something that affects anyone, and
   `[review-{{BATCH}}] QUESTION #n: ... default: ...` if blocked (same numbering as STATUS;
   poll the reply file for `^#n:` for at most 8 minutes, in the background, and proceed on the
@@ -53,9 +55,10 @@ For each item:
    against the mutation, is a FAIL for that item.
 4. For behavior changes, reproduce the runtime check yourself on your port. Describe what you
    observed with the same kind of evidence you would demand from the implementer: logged
-   values, measured numbers, screenshots. For visual claims, use a windowed capture that you
-   open and describe honestly, flaws included; headless renderers return placeholder data and
-   have produced both false alarms and false passes.
+   values, measured numbers, screenshots. For claims about what a user sees, use a capture
+   from the real environment that you open and describe honestly, flaws included; a stubbed
+   environment (headless renderer, mocked service, fake device) returns data that looks real
+   and has produced both false alarms and false passes.
 5. Compare the implementer's stated evidence with what you saw. A mismatch is a FAIL even if
    the code looks right.
 

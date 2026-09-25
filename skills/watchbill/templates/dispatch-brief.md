@@ -15,7 +15,7 @@ round. Your full contract is in a file. Before anything else:
 - MAIL: {{MAIL}}
 - SCRATCH: {{SCRATCH}} (the session scratchpad; you use only `{{SCRATCH}}/{{TASK}}/`)
 - PORT: {{PORT}}
-- EXCLUSIVE: {{EXCLUSIVE}} (lock-file resources such as `gpu`; write `none` if there are none)
+- EXCLUSIVE: {{EXCLUSIVE}} (this project's one-at-a-time resources, named by the controller, e.g. `render-window`, `test-db`, `browser-pane`; write `none` if there are none)
 - DEV_CMD: {{DEV_CMD}}
 - TEST_CMD: {{TEST_CMD}}
 - TYPECHECK_CMD: {{TYPECHECK_CMD}}
@@ -31,6 +31,8 @@ Read-only context (read, never edit, never claim): {{READ_ONLY}}
 ## ITEMS
 
 {{ITEMS}}
+
+(An item tagged `options-first` follows the options pattern in the template: variants as knobs, a labelled comparison, old default committed, a `QUESTION ... PICK:` for the choice.)
 
 ## RUNTIME_NOTES
 

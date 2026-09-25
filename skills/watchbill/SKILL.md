@@ -9,7 +9,25 @@ This session is the **controller**. It dispatches subagents, watches a mailbox, 
 questions, merges, and decides. It does not implement, and it never reads agent transcripts,
 only final reports and mailbox lines. Every rule below exists because of something that went
 wrong on a real project; the reason is given so you can apply the rule sensibly rather than
-mechanically.
+mechanically. The skill is general-purpose: nothing in the rules is specific to games,
+engines, or graphics; those appear only as examples, and each project decides its own
+exclusive resources and runtime notes.
+
+## Changelog
+
+- **2026-09-24, round 2** (a two-day run, about 25 dispatches, up to 7 parallel agents):
+  `STATUS` split into `PLAN` (answered) and `PROGRESS` (read, not answered); relayed user
+  feedback marked `NOTE (USER)` with a verbatim quote; options-first pattern for subjective
+  work; reviewer after every merged batch without exception; red-integration policy; task
+  worktrees kept until follow-ups are decided and follow-ups reuse the task name; a standing
+  user model preference overrides the per-task suggestions; domain wording demoted to examples.
+- **2026-09-24, round 1** (a multi-day run with 3 to 4 agents): per-agent scratch folders;
+  `setup.sh --add` and live-mailbox refusal; watcher offsets in `.watch-state` with `--replay`;
+  lock files for exclusive resources; `NOTE@HH:MM`, applied-NOTE suffixes, and `PAUSE`;
+  scope-change broadcast; staging merges; windowed-capture evidence, verbatim test counts,
+  mutation proof; Windows and OneDrive hazards; the controller never `cd`s.
+- **2026-09-10 to 09-13**: first version. Worktrees, allowlists, file mailbox with acknowledged
+  statuses, claims as notices, independent reviewer, templates read from disk, single-task use.
 
 ## When to use
 
@@ -35,8 +53,8 @@ mechanically.
 **Choose the model per task, not per round.** The brief carries a model for each task, so
 decide it in the partition step:
 
-- `opus` (Claude Opus 5.5) for judgment-heavy work: multi-file engine changes, gameplay feel,
-  anything visual, a brief that cannot fully specify the answer. A stronger implementer
+- `opus` (Claude Opus 5.5) for judgment-heavy work: multi-file changes, anything subjective
+  (look, feel, copy, API shape), a brief that cannot fully specify the answer. A stronger implementer
   finishes in fewer turns and fewer fix rounds, and one avoided fix round (an implementer
   dispatch plus a reviewer pass) pays for its price gap over Sonnet.
 - `sonnet` for well-specified work: a single-file fix with a clear test, data encoding, config.
@@ -48,11 +66,13 @@ decide it in the partition step:
   from being a different model than the implementer.
 - Controller: this session's model. Coordination is the smallest share of the spend and a
   misjudgment there costs the most.
+- A standing preference from the user (for example, every agent on the strongest model)
+  overrides all of the above. Ask once, then put the model in every brief.
 
 Opus 5.5 defaults to `medium` effort; pass a higher effort explicitly for implementation with
 runtime verification, or it will under-think exactly the tasks it was chosen for. A run of
-three Opus agents still produced tests that could not fail, a false alarm from a headless
-capture, and a commit made past a scope change; the model does not replace the rules above.
+three Opus agents still produced tests that could not fail, a false alarm from stubbed
+runtime data, and a commit made past a scope change; the model does not replace the rules above.
 
 Dispatch with the Agent tool: `subagent_type: "general-purpose"`, `model` per the task,
 `run_in_background: true`, and a **short brief that points at the template file** (step 4).
@@ -77,12 +97,15 @@ The template on disk is the contract; the brief only supplies the values.
    13); every new test comes with a mutation proof, shown failing against a deliberate break
    of the code it guards (the reviewer kept finding tests that could not fail); and any claim
    about how something looks needs a windowed capture the agent opened and described
-   honestly, because headless renderers return placeholder data that has produced both a
-   false alarm and a flawed capture called "correct".
+   honestly, because an environment with stubbed services (a headless renderer, a mocked API,
+   a fake device) returns data that looks real and has produced both a false alarm and a
+   flawed capture called "correct".
 5. **Findings go out immediately, and so does intent.** An `ISSUE` line the moment something is
-   noticed, not in the final report thirty minutes later. A `STATUS` line before each item
-   saying how it will be done, which the controller acknowledges or corrects. A wrong reading
-   of the brief is cheapest to fix before the first commit.
+   noticed, not in the final report thirty minutes later. A `STATUS PLAN` line before each item
+   saying how it will be done, which the controller acknowledges or corrects; a wrong reading
+   of the brief is cheapest to fix before the first commit. Observations and heartbeats go as
+   `STATUS PROGRESS`, which the controller reads but does not answer. With seven agents the
+   controller spent most of its effort acknowledging progress lines that needed no answer.
 6. **Other people's work is expected.** Agents will see commits, files, servers, and hooks they
    did not create. Report what you see, ask if it changes your plan, never revert or work
    around it without a message from the controller or the owning agent. No message means
@@ -90,8 +113,11 @@ The template on disk is the contract; the brief only supplies the values.
 7. **Nothing waits on another agent.** Claims are notices, not locks. Questions carry a default
    assumption and a time limit. So there is no deadlock. The one bounded exception is an
    **exclusive resource** (rule 11).
-8. **Independent reviewer.** After each batch a read-only reviewer is told not to trust the
-   implementer reports and to verify by reading code and running commands.
+8. **Independent reviewer, after every merged batch, no exceptions.** A read-only reviewer is
+   told not to trust the implementer reports and to verify by reading code and running
+   commands. One day six branches merged with no review, after every earlier review had found
+   real bugs the implementers reported as fine: a converter washing out colours, a test runner
+   passing broken tests four ways, colliders you could walk through, a click firing on release.
 9. **One writer per shared document.** A spec that several agents would edit goes to one
    agent per batch, or each agent writes `docs/notes/<task>.md` and the controller folds the
    notes in afterwards.
@@ -99,11 +125,14 @@ The template on disk is the contract; the brief only supplies the values.
     each agent works only in `<scratchpad>/<task>/` and deletes only inside it. One agent's
     cleanup once deleted another's helper scripts mid-run. Reviewers never put probe files in
     the repository; a probe test dropped into the test folder hung the controller's suite run.
-11. **Exclusive resources are locked, briefly.** A single GPU window, a device, a license seat:
-    the controller lists them in the brief, agents take `.agent-mail/locks/<resource>`
-    immediately before use and release immediately after, a lock older than 10 minutes is
-    stale, and nobody holds one while waiting for anything else. Before this, agents sharing
-    one capture window "waited 30 s and retried" into each other and produced garbage.
+11. **Exclusive resources are locked, briefly.** Every project has things only one agent can
+    use at a time (a render or capture window, a single test database, an emulator or device,
+    a rate-limited API, a licensed tool, the shared browser pane). The controller identifies
+    them when partitioning and lists them in the brief; the skill supplies one generic
+    mechanism: agents take `.agent-mail/locks/<resource>` immediately before use and release
+    immediately after, a lock older than 10 minutes is stale, and nobody holds one while
+    waiting for anything else. Before this, agents sharing one window "waited 30 s and
+    retried" into each other and produced garbage.
 12. **Instructions must be seen before they matter.** Agents read the reply file in the same
     shell command as every commit and before any step longer than five minutes; every
     `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
@@ -124,8 +153,10 @@ Group the plan's items into tasks with disjoint file sets. With one task the par
 trivial: one allowlist, one port, one model; still write them down, the brief needs them. For
 each task decide the allowlist, port, model, and items. If two tasks need the same file, either
 combine them into one task or give the file to one task and let the other log an `ISSUE`
-describing the change it wanted. List every **exclusive resource** (one GPU window for
-captures, a device, a seat) by name; agents lock those and only those.
+describing the change it wanted. List every **exclusive resource** this project has by
+name (a render or capture window, a test database, an emulator, a rate-limited API, a
+licensed tool, the shared browser pane); agents lock those and only those. Mark subjective
+items `options-first` so the agent builds labelled variants instead of guessing.
 
 ### 2. Set up the repo
 `<skill-dir>` below is this skill's base directory, reported when the skill was loaded (a
@@ -182,9 +213,11 @@ the template already says (mailbox rules, evidence rules, report format) is neve
 
 | Line | Controller action |
 |------|-------------------|
-| `STATUS #n` | Read it against the brief and the design. If the approach is right, append `#n: ACK`. If not, append `#n: <what to do instead>`, concrete enough to act on. Every status gets one of the two; an agent that hears nothing assumes it is on track. |
+| `STATUS #n PLAN` | Read it against the brief and the design. If the approach is right, append `#n: ACK`. If not, append `#n: <what to do instead>`, concrete enough to act on. Every PLAN gets one of the two; the agent reads it before that item's first commit. |
+| `STATUS #n PROGRESS` | Read it; check the `applied NOTE@` suffix. Reply only to correct something. With seven agents, answering every progress line was most of the controller's effort and none of its value. |
 | `ISSUE` | Read it. If it needs a decision now, write a reply. Otherwise note it for the review or the post-merge list. |
 | `QUESTION #n` | Decide, then append `#n: <answer>` to `.agent-mail/<task>.reply`. The agent proceeds on its default after 8 minutes, so answer promptly or accept the default. |
+| `QUESTION #n PICK` | An options-first item is ready. Show the user the comparison and relay their choice as `#n: B`, quoting any reason verbatim. If it arrives after the agent's report, switch the knob yourself after merge. |
 | `TO <other>` | Nothing, unless the target has already finished or is not running; then relay by reply file to whoever needs it. |
 | `CLAIM` | Check for a conflicting claim from another agent. If there is one, reply to the later claimant to skip and log an ISSUE. |
 | `DONE` | Progress only (one per item). Nothing to do. |
@@ -200,7 +233,11 @@ printf '#1: ACK\n' >> .agent-mail/task-a.reply
 printf '#2: no, keep the bounds in src/types.ts; formation already reads them from there\n' >> .agent-mail/task-a.reply
 printf 'NOTE@%s: formation now owns src/types.ts; do not claim it\n' "$(date +%H:%M)" >> .agent-mail/task-b.reply
 printf 'NOTE@%s: PAUSE\n' "$(date +%H:%M)" >> .agent-mail/task-c.reply
+printf 'NOTE@%s (USER): "the jump feels floaty, cut the hang time"\n' "$(date +%H:%M)" >> .agent-mail/task-a.reply
 ```
+Relayed user feedback is always the user's exact words in a `(USER)` line; put your own
+interpretation on a separate line if it is needed at all. Agents acted best on the quote and
+worst on paraphrases of it.
 `PAUSE` means: finish the current step, commit what is green, skip the remaining items,
 report. Use it when the plan changes under an agent or the budget is gone; it beats letting
 the agent finish items you will throw away.
@@ -243,15 +280,27 @@ merge again on its `DONE`. `git merge-tree --write-tree <integration> <task>` pr
 conflict without touching any checkout. Keep task worktrees until the review is done; fix
 agents reuse them. Remove `_staging` with the other worktrees at cleanup.
 
-### 7. Review the batch
-When every task in the batch is merged and the merged tree is green, dispatch
+Integration must be green after every fast-forward. If a test is red for a reason nobody is
+fixing now, quarantine it explicitly: skip it with a reason and an owner in the skip itself,
+record an `ISSUE`, and put it on the open list. A known-red test left in place for hours made
+every agent report "all pass except the known one", which hid a new failure in that test.
+
+### 7. Review the batch, every batch
+When every task in the batch is merged and the merged tree is green, dispatch the reviewer.
+This step is never skipped, however small the batch or however clean the reports: the one day
+it was skipped, six branches went in unreviewed, after every previous review had found real
+bugs the implementers had reported as fine. Dispatch
 `templates/reviewer.md` (the strongest model you can afford, read-only, own port, its own
 `SCRATCH` folder, the same `EXCLUSIVE` list). It reports per item PASS/FAIL with `file:line` and a concrete fix for
 each FAIL, repeats at least one mutation proof per item, and pastes the runner's final line.
 
 ### 8. Fix, re-merge, clean up
-Dispatch fixes to the original task's worktree (same implementer template, items = the FAIL
-list for that task, branch already exists). Merge on `DONE`, run the suite again. Then:
+Dispatch fixes to the original task's worktree (same implementer template, same task name,
+same inbox and reply files, items = the FAIL list for that task, branch already exists).
+Merge on `DONE`, run the suite again. Do not clean up until the review is in and the follow-up
+list for each task is decided: twice a worktree was removed and the same agent then needed
+more work, which forced a new task name and fresh mailbox files. Follow-ups reuse the task
+name. Then:
 ```bash
 bash "<skill-dir>/scripts/cleanup.sh" task-a task-b task-c
 ```
@@ -310,11 +359,13 @@ the reason to run the skill at all, and they do not depend on how many agents th
   drive the update function themselves with real time deltas. Expect the report to say which.
 - Pure data tasks (encoding a table, writing config) need no runtime evidence; say so
   explicitly in the brief so the agent does not start a server for nothing.
-- Headless renderers lie. A headless Godot or a renderer without a window returns placeholder
-  data (an empty MultiMesh buffer made a correct copy look broken and an agent raised a false
-  alarm). Any claim about how something looks or where instances are needs a windowed capture
-  the agent opens and describes, flaws included. Say in the notes how to launch windowed on
-  this project, and name the capture window as an `EXCLUSIVE` resource if there is only one.
+- Stubbed environments lie. Anything with stubbed services (a headless renderer, a mocked
+  API, a fake device, an in-memory database) returns data that looks real. Example: a headless
+  Godot run returned an empty instance buffer, a correct scene looked broken, and an agent
+  raised a false alarm. Any claim about what a user would see or get needs evidence from the
+  real environment that the agent opens and describes, flaws included. Say in the notes how
+  to launch the real thing on this project, and name it under `EXCLUSIVE` if only one agent
+  can use it at a time.
 - Ask for the runner's final line, not a count. Reports have said "15 new tests" when the
   runner said 13; the pasted line settles it.
 
@@ -339,12 +390,13 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - [ ] `setup.sh` run once (reset) at round start; `--add` for any task added mid-round; worktrees exist; setup command succeeded in each
 - [ ] Monitor started on `watch.sh`, persistent; re-armed without `--replay` when it expires
 - [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the model chosen for that task (explicit effort for Opus)
-- [ ] Every STATUS answered with ACK or a correction; every QUESTION answered, or its default accepted consciously; every mandatory instruction sent as a numbered reply; every STATUS/DONE checked for the NOTEs it lists
-- [ ] Scope moves told to both agents with the file ownership
+- [ ] Every STATUS PLAN answered with ACK or a correction; every PROGRESS read, not answered; every QUESTION answered, or its default accepted consciously; every PICK shown to the user; every mandatory instruction sent as a numbered reply; every STATUS/DONE checked for the NOTEs it lists
+- [ ] Scope moves told to both agents with the file ownership; user feedback relayed as a verbatim `(USER)` quote
+- [ ] Integration green after each fast-forward, or the red test quarantined with reason and owner
 - [ ] Each DONE merged into staging; suite, typecheck, and build green there before integration fast-forwards
-- [ ] Reviewer dispatched on the batch, told not to trust reports
+- [ ] Reviewer dispatched on the batch, told not to trust reports; never skipped
 - [ ] FAIL items dispatched as fixes, re-merged, re-tested
-- [ ] Worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
+- [ ] Follow-ups decided before cleanup; worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
 
 ## Files in this skill
 

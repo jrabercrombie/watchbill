@@ -22,7 +22,8 @@ printf '[%s] ISSUE: %s\n' "task-a" "level.json has a duplicate id 17; not in my 
 
 | Prefix | Meaning | When |
 |--------|---------|------|
-| `STATUS #n:` | What you are about to do and how, in one or two lines: the approach for the item, the evidence you plan to collect, a decision you just made. Ends with the NOTE lines you have applied so far (`applied NOTE@14:02, NOTE@14:20` or `no NOTEs`). The controller answers every status with `#n: ACK` or `#n: <correction>`. | At task start (your plan), at the start of each item, after each runtime check (what you observed), and whenever 10 minutes pass with no line from you. |
+| `STATUS #n PLAN:` | What you are about to do and how, in one or two lines: the approach for the item, the files, the evidence you plan to collect. Ends with the NOTE lines applied so far (`applied NOTE@14:02, NOTE@14:20` or `no NOTEs`). The controller answers every PLAN with `#n: ACK` or `#n: <correction>`; read the reply before the item's first commit. | At task start (the whole plan) and at the start of each item. |
+| `STATUS #n PROGRESS:` | An observation, a runtime result, a heartbeat. Same suffix. The controller reads it but does not answer unless it needs correcting, so do not expect a reply. | After each runtime check (what you observed), and whenever 10 minutes pass with no line from you. |
 | `ISSUE:` | Any finding, in or out of scope: a bug noticed, a stale doc, odd data, an environment quirk, something another agent did that looks wrong or relevant to anyone. | **Immediately**, the moment it is noticed. Not in the final report. |
 | `QUESTION #n:` | A blocking question. Must include `default:` with the assumption you will proceed on. | When you cannot proceed without a decision. |
 | `DONE:` | A milestone, with the commit hash, ending with the NOTE lines applied in that commit (`applied NOTE@14:02` or `no NOTEs`). | After each item's commit. |
@@ -31,7 +32,9 @@ printf '[%s] ISSUE: %s\n' "task-a" "level.json has a duplicate id 17; not in my 
 | `CLAIM:` | A path outside your allowlist, or a server port, that you are about to use. | Before the first edit or start. |
 
 `STATUS` and `QUESTION` share one numbering sequence per agent (#1, #2, #3 ...), so every
-reply line `#n:` in your reply file maps to exactly one thing you sent.
+reply line `#n:` in your reply file maps to exactly one thing you sent. The PLAN/PROGRESS split
+exists because with seven agents the controller spent most of its effort acknowledging
+progress lines that needed no answer; a PLAN is the line that can save you an hour.
 
 The `applied NOTE@...` suffix exists because agents have committed before seeing a NOTE that
 changed their scope. Listing what you applied lets the controller see at a glance that an
@@ -75,6 +78,9 @@ In the reply file:
 - `#n: <anything else>` is a correction to status or question n and changes what you do next.
 - `NOTE@HH:MM: ...` is an unsolicited instruction, stamped with the time it was written. Apply
   it before your next commit and cite it (`applied NOTE@HH:MM`) in your next STATUS and DONE.
+- `NOTE@HH:MM (USER): "..."` is the user's own words, quoted verbatim; any controller
+  interpretation follows on its own line. Act on the quote first. Agents acted best on the
+  user's exact words and worst on paraphrases of them.
 - `NOTE@HH:MM: PAUSE` means: finish the step you are in, commit the work that is green, skip
   every remaining item, and write your final report now. Do not start anything new.
 
@@ -95,13 +101,35 @@ If another agent holds the file or port, do not wait for them: skip that edit, a
 apply it after merge, and continue. Nothing in this protocol ever waits on another agent, so
 there is no deadlock.
 
+A claim can be narrower than a file. Naming the functions or line ranges you will touch
+(`CLAIM: src/level.gd functions spawn_wave, _tick`) lets several agents share one file: three
+agents once edited the same file concurrently with zero conflicts by claiming disjoint
+functions and telling each other with `TO` lines when a signature changed.
+
+## Options for subjective work
+
+When an item is marked `options-first` (look, feel, wording, an API shape, anything where the
+user will want to choose), do not pick for them. Build the variants as switchable knobs,
+produce a labelled comparison (screenshots or a table, in your scratch folder or the report),
+commit with the **old** behaviour as the default, then ask:
+
+```
+[<task>] QUESTION #n PICK: A=<label> B=<label> C=<label>; comparison at <path>; default: keep A (current)
+```
+
+Poll for the reply as for any question, keep working on other items, and apply the pick
+before your next commit if it arrives; if it has not arrived by the final report, say so and
+leave the knobs in place for the controller to switch. One guessed variant was reworked from
+scratch; three labelled ones were chosen from in a single reply.
+
 ## Exclusive resources
 
-Some things cannot be shared or skipped: the one GPU window for captures, a hardware device, a
-license seat. The controller names them in the brief under `EXCLUSIVE`. These, and only these,
-use a lock file `locks/<resource>` holding your task name and a timestamp. Before "wait 30 s
-and retry" became this rule, several agents needing the same window collided and produced
-garbage captures.
+Every project has things only one agent can use at a time: a render or capture window, a
+single test database, an emulator or device, a rate-limited API, a licensed tool, the shared
+browser pane. The controller names this project's under `EXCLUSIVE` in the brief. These, and
+only these, use a lock file `locks/<resource>` holding your task name and a timestamp. Before
+"wait 30 s and retry" became this rule, several agents needing the same window collided and
+produced garbage captures.
 
 ```bash
 # acquire: succeeds for exactly one caller; a lock older than 10 minutes is stale and taken over
