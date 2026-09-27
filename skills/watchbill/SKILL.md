@@ -15,6 +15,9 @@ exclusive resources and runtime notes.
 
 ## Changelog
 
+- **2026-09-27**: the controller keeps a minimal decision log (`docs/DECISIONS.md`) of user
+  decisions and the steps taken after them, committed on integration, and reads it first on
+  resume.
 - **2026-09-24, round 2** (a two-day run, about 25 dispatches, up to 7 parallel agents):
   `STATUS` split into `PLAN` (answered) and `PROGRESS` (read, not answered); relayed user
   feedback marked `NOTE (USER)` with a verbatim quote; options-first pattern for subjective
@@ -319,11 +322,33 @@ Apply any ISSUE-listed edits that were skipped because of claims, fold `docs/not
 into the shared doc, and tell the user what merged, what the reviewer found, and what is still
 open.
 
+## Decision log
+
+The controller keeps `docs/DECISIONS.md` on the integration branch (a project may name another
+path; say so in the partition). It is the durable record of what the user decided and what was
+done about it, so neither the user nor a resumed session has to rely on memory or transcripts.
+Keep it minimal: one line per entry, newest last, under a date heading. Two kinds of line:
+
+```
+## 2026-03-14
+- D: dark theme becomes the default; light stays selectable ("dark reads better")
+- A: dispatched task-b (dark theme default)
+- A: merged task-b 1a2b3c4, suite 212 green
+```
+
+`D:` is a user decision in a few words, with a short quote when the wording matters. `A:` is a
+step the controller took: a dispatch, a merge (commit and test count), a revert, a pick applied.
+Point at commits, files, and screenshots instead of repeating their content. Append a `D:` when
+the user decides and an `A:` after each dispatch and merge, and commit the log with the merge
+or on its own. Do not log agent-internal steps, statuses, or reviewer findings; the mailbox and
+reports hold those.
+
 ## Resuming after a session restart
 
 Background agents and the watcher do not survive a session restart, but their worktrees,
 commits, and mailbox lines do. On resume:
 
+0. Read `docs/DECISIONS.md` for what the user decided and what was last dispatched and merged.
 1. `git worktree list` and `git log main..<task>` for each task: the branch shows what landed;
    the mailbox `DONE` lines say which items those commits were.
 2. Check the worktree is clean and no stray servers hold ports (`netstat -ano | grep LISTENING`).
@@ -365,7 +390,7 @@ the reason to run the skill at all, and they do not depend on how many agents th
   explicitly in the brief so the agent does not start a server for nothing.
 - Stubbed environments lie. Anything with stubbed services (a headless renderer, a mocked
   API, a fake device, an in-memory database) returns data that looks real. Example: a headless
-  Godot run returned an empty instance buffer, a correct scene looked broken, and an agent
+  renderer returned an empty instance buffer, a correct scene looked broken, and an agent
   raised a false alarm. Any claim about what a user would see or get needs evidence from the
   real environment that the agent opens and describes, flaws included. Say in the notes how
   to launch the real thing on this project, and name it under `EXCLUSIVE` if only one agent
@@ -401,6 +426,7 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - [ ] Each DONE merged into staging; suite, typecheck, and build green there before integration fast-forwards
 - [ ] Reviewer dispatched on the batch, told not to trust reports; never skipped
 - [ ] FAIL items dispatched as fixes, re-merged, re-tested
+- [ ] Decision log updated: a `D:` for each user decision, an `A:` for each dispatch and merge
 - [ ] Follow-ups decided before cleanup; worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
 
 ## Files in this skill
