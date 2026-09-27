@@ -327,21 +327,22 @@ open.
 The controller keeps `docs/DECISIONS.md` on the integration branch (a project may name another
 path; say so in the partition). It is the durable record of what the user decided and what was
 done about it, so neither the user nor a resumed session has to rely on memory or transcripts.
-Keep it minimal: one line per entry, newest last, under a date heading. Two kinds of line:
+Keep it minimal: one line per entry, newest last, under a date heading.
 
 ```
 ## 2026-03-14
-- D: dark theme becomes the default; light stays selectable ("dark reads better")
-- A: dispatched task-b (dark theme default)
-- A: merged task-b 1a2b3c4, suite 212 green
+- Decided: the dark theme is the default; the light theme stays selectable ("dark reads better")
+- Done: dispatched task-b to make the dark theme the default
+- Done: merged task-b (1a2b3c4), suite 212 green
 ```
 
-`D:` is a user decision in a few words, with a short quote when the wording matters. `A:` is a
-step the controller took: a dispatch, a merge (commit and test count), a revert, a pick applied.
-Point at commits, files, and screenshots instead of repeating their content. Append a `D:` when
-the user decides and an `A:` after each dispatch and merge, and commit the log with the merge
-or on its own. Do not log agent-internal steps, statuses, or reviewer findings; the mailbox and
-reports hold those.
+Write every entry as a plain description a reader can understand months later without the
+conversation. Never refer to a choice by its label from an options round ("option B", "variant
+2", "N1"): write what was chosen ("soft shadow edges", not "B"). Quote the user briefly when the
+wording matters. Point at commits, files, and screenshots instead of repeating their content.
+Add a `Decided:` line when the user decides and a `Done:` line after each dispatch and merge, and
+commit the log with the merge or on its own. Do not log agent-internal steps, statuses, or
+reviewer findings; the mailbox and reports hold those.
 
 ## Resuming after a session restart
 
@@ -426,7 +427,7 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - [ ] Each DONE merged into staging; suite, typecheck, and build green there before integration fast-forwards
 - [ ] Reviewer dispatched on the batch, told not to trust reports; never skipped
 - [ ] FAIL items dispatched as fixes, re-merged, re-tested
-- [ ] Decision log updated: a `D:` for each user decision, an `A:` for each dispatch and merge
+- [ ] Decision log updated: a `Decided:` line for each user decision, a `Done:` line for each dispatch and merge, all in plain words
 - [ ] Follow-ups decided before cleanup; worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
 
 ## Files in this skill
