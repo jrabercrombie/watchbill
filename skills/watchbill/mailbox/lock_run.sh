@@ -53,7 +53,10 @@ while [ -z "$lock" ]; do
   fi
 done
 printf '%s %s\n' "$task" "$(date -u +%FT%TZ)" > "$lock/owner"
-trap 'if [ "$(cut -d" " -f1 "$lock/owner" 2>/dev/null)" = "$task" ]; then rm -rf "$lock"; fi' EXIT
+release() { if [ "$(cut -d" " -f1 "$lock/owner" 2>/dev/null)" = "$task" ]; then rm -rf "$lock"; fi; }
+trap release EXIT
+trap 'release; exit 143' TERM
+trap 'release; exit 130' INT
 echo "lock_run: $task holds $resource.$chosen" >&2
 export LOCK_RESOURCE="$resource" LOCK_INSTANCE="$chosen"
 "$@"
