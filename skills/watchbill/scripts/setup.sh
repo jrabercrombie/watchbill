@@ -81,13 +81,14 @@ done < "$SKILL_DIR/mailbox/gitignore-lines.txt"
 
 mkdir -p .agent-mail
 if [ "$MODE" = reset ]; then
-  cp "$SKILL_DIR/mailbox/PROTOCOL.md" "$SKILL_DIR/mailbox/watch.sh" .agent-mail/
+  cp "$SKILL_DIR/mailbox/PROTOCOL.md" "$SKILL_DIR/mailbox/watch.sh" "$SKILL_DIR/mailbox/lock_run.sh" .agent-mail/
   rm -f .agent-mail/inbox-*.log .agent-mail/*.reply .agent-mail/.watch-state
   rm -rf .agent-mail/locks
   echo "mailbox reset: $ROOT/.agent-mail"
 else
   [ -e .agent-mail/PROTOCOL.md ] || cp "$SKILL_DIR/mailbox/PROTOCOL.md" .agent-mail/
   [ -e .agent-mail/watch.sh ] || cp "$SKILL_DIR/mailbox/watch.sh" .agent-mail/
+  [ -e .agent-mail/lock_run.sh ] || cp "$SKILL_DIR/mailbox/lock_run.sh" .agent-mail/
   echo "mailbox kept: $ROOT/.agent-mail (add mode)"
 fi
 mkdir -p .agent-mail/locks

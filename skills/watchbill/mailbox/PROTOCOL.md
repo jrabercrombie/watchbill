@@ -131,25 +131,25 @@ only these, use a lock file `locks/<resource>` holding your task name and a time
 "wait 30 s and retry" became this rule, several agents needing the same window collided and
 produced garbage captures.
 
+Use the helper, never hand-written locking. Across several real runs, agents that locked by
+hand ran their command after a failed acquire, removed another agent's lock, or left locks
+behind; each time a capture or measurement was silently spoiled.
+
 ```bash
-# acquire: succeeds for exactly one caller; a lock older than 10 minutes is stale and taken over
-lock() {
-  local f="<mail>/locks/$1" i
-  for i in $(seq 1 40); do
-    ( set -o noclobber; printf '%s %s\n' "<task>" "$(date -u +%FT%TZ)" > "$f" ) 2>/dev/null && return 0
-    if [ -n "$(find "$f" -mmin +10 2>/dev/null)" ]; then rm -f "$f"; continue; fi
-    sleep 15
-  done
-  return 1
-}
-# release: only your own lock
-unlock() { local f="<mail>/locks/$1"; grep -q "^<task> " "$f" 2>/dev/null && rm -f "$f"; }
+bash <mail>/lock_run.sh <task> <resource> <command...>
 ```
 
-Rules: acquire immediately before use and release immediately after; never hold a lock while
-polling for a reply or running anything unrelated; if `lock` returns 1 after its 10 minutes,
-append an `ISSUE`, do the rest of your work, and retry the capture last. A stale lock is one
-whose owner crashed; taking it over is expected, not rude.
+It waits for the resource, never runs the command without the lock, releases only its own
+lock, and takes over a lock older than 30 minutes (its owner crashed). When a resource has
+several interchangeable instances (two GPUs, two device slots), the controller lists them in
+`<mail>/resources.conf` (`<resource> = <instance> <instance>`); the helper takes whichever is
+free and passes it to the command as `$LOCK_INSTANCE`. Set `LOCK_PREFER=<instance>` when the
+work needs one particular instance, for example two measurements that must be compared on the
+same hardware, and say in your report which instance produced each number.
+
+Rules: wrap only the step that needs the resource; never hold a lock while polling for a reply
+or running anything unrelated; if the helper gives up (exit 75), append an `ISSUE`, do the rest
+of your work, and retry that step last. Stop only processes you started yourself.
 
 ## Other people's work
 

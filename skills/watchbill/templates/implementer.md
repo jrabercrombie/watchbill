@@ -148,11 +148,11 @@ printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log
   skip that edit, log an `ISSUE` describing exactly the change you wanted (file, lines,
   intent) so the controller can apply it after merge, and continue. Claims are notices, not
   locks. Never wait on another agent.
-- Exclusive resources ({{EXCLUSIVE}}) are the one exception: take `{{MAIL}}/locks/<resource>`
-  with the `lock` function in `{{MAIL}}/PROTOCOL.md` immediately before use, release it
-  immediately after, never hold it while polling for a reply, and treat a lock older than 10
-  minutes as abandoned. If you cannot get it within 10 minutes, send an `ISSUE`, do the rest
-  of your work, and retry last.
+- Exclusive resources ({{EXCLUSIVE}}) are the one exception: run the step that needs one
+  through `bash {{MAIL}}/lock_run.sh <task> <resource> <command...>` (never lock by hand),
+  never hold it while polling for a reply, and stop only processes you started. If the helper
+  gives up (exit 75), send an `ISSUE`, do the rest of your work, and retry that step last.
+  When a measurement is compared across runs, pin the instance with `LOCK_PREFER` and report it.
 - `DONE: <hash> <summary>; applied <NOTE list>` after each commit, and `DONE ALL: <hashes>;
   applied <full NOTE list>` once right before your final report.
 

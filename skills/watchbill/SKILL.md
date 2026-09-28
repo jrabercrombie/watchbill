@@ -15,6 +15,9 @@ exclusive resources and runtime notes.
 
 ## Changelog
 
+- **2026-09-27, later**: exclusive resources go through one helper, `lock_run.sh`, which also
+  shares a pool of interchangeable instances declared in `.agent-mail/resources.conf`;
+  hand-written locking is no longer allowed.
 - **2026-09-27**: the controller keeps a minimal decision log (`docs/DECISIONS.md`) of user
   decisions and the steps taken after them, committed on integration, and reads it first on
   resume.
@@ -132,14 +135,17 @@ The template on disk is the contract; the brief only supplies the values.
     each agent works only in `<scratchpad>/<task>/` and deletes only inside it. One agent's
     cleanup once deleted another's helper scripts mid-run. Reviewers never put probe files in
     the repository; a probe test dropped into the test folder hung the controller's suite run.
-11. **Exclusive resources are locked, briefly.** Every project has things only one agent can
-    use at a time (a render or capture window, a single test database, an emulator or device,
-    a rate-limited API, a licensed tool, the shared browser pane). The controller identifies
-    them when partitioning and lists them in the brief; the skill supplies one generic
-    mechanism: agents take `.agent-mail/locks/<resource>` immediately before use and release
-    immediately after, a lock older than 10 minutes is stale, and nobody holds one while
-    waiting for anything else. Before this, agents sharing one window "waited 30 s and
-    retried" into each other and produced garbage.
+11. **Exclusive resources are locked, briefly, through one helper.** Every project has things
+    only one agent can use at a time (a render or capture window, a single test database, an
+    emulator or device, a rate-limited API, a licensed tool, the shared browser pane). The
+    controller identifies them when partitioning and lists them in the brief. When the machine
+    has several interchangeable instances of one (two GPUs, two phones, two test databases),
+    the controller lists them in `.agent-mail/resources.conf` so two agents can work at once
+    instead of queueing. Agents run the step that needs the resource through
+    `.agent-mail/lock_run.sh <task> <resource> <command...>`, which waits, never runs without
+    the lock, frees only its own lock, takes over stale ones, and hands the chosen instance to
+    the command. Hand-written locking failed repeatedly: commands ran after a failed acquire,
+    agents deleted each other's locks, and measurements were silently taken on shared hardware.
 12. **Instructions must be seen before they matter.** Agents read the reply file in the same
     shell command as every commit and before any step longer than five minutes; every
     `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
@@ -434,6 +440,6 @@ the reason to run the skill at all, and they do not depend on how many agents th
 
 - `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
   `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
-- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
+- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/lock_run.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
   at run time the mailbox also holds `.watch-state` and `locks/`)
 - `scripts/setup.sh` (reset, `--add`, `--force`), `scripts/cleanup.sh`

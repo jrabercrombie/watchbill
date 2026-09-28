@@ -19,8 +19,9 @@ checkout. Paths contain spaces; quote them.
   the main repository) and probe the copy.
 - Do not stop any running server; ports in use belong to other agents. Your own dev server, if
   you need one, runs on port **{{PORT}}** via `{{DEV_CMD}}`, and you stop it when finished.
-- Exclusive resources ({{EXCLUSIVE}}): take `{{MAIL}}/locks/<resource>` with the `lock`
-  function in `{{MAIL}}/PROTOCOL.md` immediately before use and release it right after.
+- Exclusive resources ({{EXCLUSIVE}}): run the step that needs one through
+  `bash {{MAIL}}/lock_run.sh review-{{BATCH}} <resource> <command...>` (never lock by hand); pin
+  the instance with `LOCK_PREFER` for any measurement you compare, and report which one.
 - Mailbox: `{{MAIL}}`. Your inbox is `{{MAIL}}/inbox-review-{{BATCH}}.log`, append-only, you
   are its only writer. Send `[review-{{BATCH}}] STATUS #1 PLAN: <your review plan>` before
   you start (the controller answers `#n: ACK` or a correction in
