@@ -137,6 +137,8 @@ behind; each time a capture or measurement was silently spoiled.
 
 ```bash
 bash <mail>/lock_run.sh <task> <resource> <command...>
+
+Waits longer than `LOCK_WARN_MIN` minutes (default 5) are logged to `<mail>/locks/waits.log` (WAIT while waiting, GOT when taken, GAVE-UP at the limit). The controller watches that file alongside the inboxes and acts on excessive waiting (fewer parallel users of the resource, or more instances).
 ```
 
 It waits for the resource, never runs the command without the lock, releases only its own

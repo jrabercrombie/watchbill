@@ -34,6 +34,10 @@ fi
 if [ -n "${LOCK_PREFER:-}" ]; then instances="$LOCK_PREFER"; fi
 
 stale="${LOCK_STALE_MIN:-30}"
+# Waits longer than LOCK_WARN_MIN minutes (default 5) are logged to <mail>/locks/waits.log, once
+# per interval while waiting and once more when the lock is finally taken, so the controller can
+# watch for excessive waiting on a resource (tail -F that file next to the inboxes).
+warn=$(( ${LOCK_WARN_MIN:-5} * 60 )); next_warn=$warn
 limit=$(( ${LOCK_WAIT_MIN:-30} * 60 ))
 lock=""; chosen=""; waited=0
 while [ -z "$lock" ]; do
@@ -47,11 +51,22 @@ while [ -z "$lock" ]; do
   done
   if [ -z "$lock" ]; then
     if [ "$waited" -ge "$limit" ]; then
+      printf '%s GAVE-UP %s %s after %d min
+' "$(date -u +%FT%TZ)" "$task" "$resource" $((waited / 60)) >> "$dir/waits.log"
       echo "lock_run: gave up waiting for $resource ($instances)" >&2; exit 75
     fi
     sleep 15; waited=$((waited + 15))
+    if [ "$waited" -ge "$next_warn" ]; then
+      printf '%s WAIT %s %s %d min (instances: %s)
+' "$(date -u +%FT%TZ)" "$task" "$resource" $((waited / 60)) "$instances" >> "$dir/waits.log"
+      next_warn=$((next_warn + warn))
+    fi
   fi
 done
+if [ "$waited" -ge "$warn" ]; then
+  printf '%s GOT %s %s.%s after %d min
+' "$(date -u +%FT%TZ)" "$task" "$resource" "$chosen" $((waited / 60)) >> "$dir/waits.log"
+fi
 printf '%s %s\n' "$task" "$(date -u +%FT%TZ)" > "$lock/owner"
 release() { if [ "$(cut -d" " -f1 "$lock/owner" 2>/dev/null)" = "$task" ]; then rm -rf "$lock"; fi; }
 trap release EXIT
