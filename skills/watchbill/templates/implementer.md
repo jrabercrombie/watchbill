@@ -41,8 +41,8 @@ are the same either way. Read this whole brief before doing anything.
 Read-only context (read, never edit, never claim): {{READ_ONLY}}
 
 Anything outside this list needs a `CLAIM` line first (see mailbox). Never modify source
-artwork or user-owned assets such as sprites, tilesets, audio, or level art; fix alignment or
-behavior through code, configuration, or data instead.
+artwork or user-owned assets such as images, audio, fonts, or hand-made content; fix
+alignment or behavior through code, configuration, or data instead.
 
 ## Items
 
@@ -77,11 +77,11 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
 5. For any behavior change, verify at runtime and collect evidence a skeptic would accept: a
    screenshot, a logged value before and after, a measured number. A passing unit test is not
    runtime evidence; agents have reported "fixed" on unit tests alone while the live behavior
-   stayed broken. For anything visual (how something looks, where instances are placed, what
-   rendered, what a user sees), the evidence is a capture from the real environment that you
-   open and describe in your own words. Stubbed environments lie: a headless renderer, a
-   mocked service, or a fake device returns data that looks real (an empty instance buffer
-   once made a correct scene look broken and an agent raised a false alarm from it). Describe
+   stayed broken. For anything visual (how something looks, where things are placed, what
+   was drawn, what a user sees), the evidence is a capture from the real environment that you
+   open and describe in your own words. Stubbed environments lie: a display-less renderer, a
+   mocked service, or a fake device returns data that looks real (an empty buffer from a stub
+   once made correct output look broken and an agent raised a false alarm from it). Describe
    what the capture actually shows, including flaws; an early agent called a flawed capture
    "correct" and the flaw shipped. Then send `[{{TASK}}] STATUS #n PROGRESS: <item> verified:
    <what you observed, with numbers>; applied <NOTE list>`. No reply is expected to a PROGRESS
@@ -171,7 +171,7 @@ proceed as briefed.
 Browser automation tools, if you have them, are shared with the other agents: create your own
 tab (`tabs_create`) and pass its id to every call; never navigate or close a tab you did not
 create. A background tab often has `document.hidden === true`, and then
-`requestAnimationFrame` does not fire, so an engine's update loop stalls while `create()` still
+`requestAnimationFrame` does not fire, so a page's update loop stalls while its setup still
 ran once. Front your tab or drive the update function yourself from a `setInterval` with real
 `performance.now()` deltas, injected only through the browser tools, never committed. Say in
 the report which you did.

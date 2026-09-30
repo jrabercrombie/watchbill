@@ -15,7 +15,7 @@ round. Your full contract is in a file. Before anything else:
 - MAIL: {{MAIL}}
 - SCRATCH: {{SCRATCH}} (the session scratchpad; you use only `{{SCRATCH}}/{{TASK}}/`)
 - PORT: {{PORT}}
-- EXCLUSIVE: {{EXCLUSIVE}} (this project's one-at-a-time resources, named by the controller, e.g. `render-window`, `test-db`, `browser-pane`; write `none` if there are none)
+- EXCLUSIVE: {{EXCLUSIVE}} (this project's one-at-a-time resources, named by the controller, e.g. `capture-window`, `test-db`, `browser-pane`; write `none` if there are none)
 - DEV_CMD: {{DEV_CMD}}
 - TEST_CMD: {{TEST_CMD}}
 - TYPECHECK_CMD: {{TYPECHECK_CMD}}

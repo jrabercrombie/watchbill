@@ -15,7 +15,7 @@ It is gitignored. Paths may contain spaces, so always quote them.
 Append with a single `printf` so a line lands whole:
 
 ```bash
-printf '[%s] ISSUE: %s\n' "task-a" "level.json has a duplicate id 17; not in my scope" >> "<mail>/inbox-task-a.log"
+printf '[%s] ISSUE: %s\n' "task-a" "prices.json has a duplicate id 17; not in my scope" >> "<mail>/inbox-task-a.log"
 ```
 
 ## Line types (every line starts with `[<task>]`)
@@ -102,7 +102,7 @@ apply it after merge, and continue. Nothing in this protocol ever waits on anoth
 there is no deadlock.
 
 A claim can be narrower than a file. Naming the functions or line ranges you will touch
-(`CLAIM: src/level.gd functions spawn_wave, _tick`) lets several agents share one file: three
+(`CLAIM: src/billing.py functions apply_discount, _round`) lets several agents share one file: three
 agents once edited the same file concurrently with zero conflicts by claiming disjoint
 functions and telling each other with `TO` lines when a signature changed.
 
@@ -124,7 +124,7 @@ scratch; three labelled ones were chosen from in a single reply.
 
 ## Exclusive resources
 
-Every project has things only one agent can use at a time: a render or capture window, a
+Every project has things only one agent can use at a time: a display or capture window, a
 single test database, an emulator or device, a rate-limited API, a licensed tool, the shared
 browser pane. The controller names this project's under `EXCLUSIVE` in the brief. These, and
 only these, use a lock file `locks/<resource>` holding your task name and a timestamp. Before
@@ -143,11 +143,31 @@ Waits longer than `LOCK_WARN_MIN` minutes (default 5) are logged to `<mail>/lock
 
 It waits for the resource, never runs the command without the lock, releases only its own
 lock, and takes over a lock older than 30 minutes (its owner crashed). When a resource has
-several interchangeable instances (two GPUs, two device slots), the controller lists them in
+several interchangeable instances (two build machines, two device slots), the controller lists them in
 `<mail>/resources.conf` (`<resource> = <instance> <instance>`); the helper takes whichever is
 free and passes it to the command as `$LOCK_INSTANCE`. Set `LOCK_PREFER=<instance>` when the
 work needs one particular instance, for example two measurements that must be compared on the
 same hardware, and say in your report which instance produced each number.
+
+A resource can have hooks that return it to a known state. A shared device or service left
+in a changed state by one holder (a process still running, a setting changed, a file left
+open) spoils the next holder's work, and a crashed holder never gets to tidy up. The
+controller can add, per resource, in the mailbox:
+
+- `hooks/<resource>.acquire`: runs right after the lock is taken, before the command.
+- `hooks/<resource>.release`: runs just before the lock is removed, whether the command
+  succeeded, failed, or was stopped with TERM or INT.
+
+Each must be executable, gets `LOCK_TASK`, `LOCK_RESOURCE` and `LOCK_INSTANCE` in its
+environment, and should be quick and idempotent (safe to run when there is nothing to tidy).
+A hook is stopped after `LOCK_HOOK_TIMEOUT` seconds (default 60). A failing or stopped hook is
+reported on stderr and never keeps the lock held or changes the command's exit code. Hooks
+belong to the project, not to this protocol; agents never write or edit them unless their
+brief says so.
+
+To update `lock_run.sh` while any agent may be inside it, write the new version to a temporary
+file next to it and rename it over the old one; editing or copying over it in place makes
+running copies read the new bytes mid-run (bash reads a script as it goes).
 
 Rules: wrap only the step that needs the resource; never hold a lock while polling for a reply
 or running anything unrelated; if the helper gives up (exit 75), append an `ISSUE`, do the rest

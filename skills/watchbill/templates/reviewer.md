@@ -58,14 +58,14 @@ For each item:
    observed with the same kind of evidence you would demand from the implementer: logged
    values, measured numbers, screenshots. For claims about what a user sees, use a capture
    from the real environment that you open and describe honestly, flaws included; a stubbed
-   environment (headless renderer, mocked service, fake device) returns data that looks real
+   environment (display-less renderer, mocked service, fake device) returns data that looks real
    and has produced both false alarms and false passes.
 5. Compare the implementer's stated evidence with what you saw. A mismatch is a FAIL even if
    the code looks right.
 
 Browser automation tools, if you have them, are shared with other agents: create your own tab
 and pass its id to every call; never navigate a tab you did not create. A background tab may
-suspend `requestAnimationFrame`, stalling an engine's update loop; front the tab or drive the
+suspend `requestAnimationFrame`, stalling a page's update loop; front the tab or drive the
 update yourself through the browser tools, and say which you did.
 
 {{RUNTIME_NOTES}}

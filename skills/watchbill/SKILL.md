@@ -9,11 +9,17 @@ This session is the **controller**. It dispatches subagents, watches a mailbox, 
 questions, merges, and decides. It does not implement, and it never reads agent transcripts,
 only final reports and mailbox lines. Every rule below exists because of something that went
 wrong on a real project; the reason is given so you can apply the rule sensibly rather than
-mechanically. The skill is general-purpose: nothing in the rules is specific to games,
-engines, or graphics; those appear only as examples, and each project decides its own
-exclusive resources and runtime notes.
+mechanically. The skill is general-purpose: nothing in it is specific to one kind of project,
+and each project decides its own exclusive resources, hooks, and runtime notes, which live in
+that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
+
+- **2026-09-29**: `lock_run.sh` runs optional per-resource hooks,
+  `.agent-mail/hooks/<resource>.acquire` and `.release`, so a shared device or service left in
+  a changed state by one holder is returned to a known state before the next holder gets it;
+  a failing or slow hook never keeps the lock. Tests in `tests/lock_run_test.sh`. Example
+  wording made domain-neutral throughout.
 
 - **2026-09-27, later**: exclusive resources go through one helper, `lock_run.sh`, which also
   shares a pool of interchangeable instances declared in `.agent-mail/resources.conf`;
@@ -107,8 +113,8 @@ The template on disk is the contract; the brief only supplies the values.
    13); every new test comes with a mutation proof, shown failing against a deliberate break
    of the code it guards (the reviewer kept finding tests that could not fail); and any claim
    about how something looks needs a windowed capture the agent opened and described
-   honestly, because an environment with stubbed services (a headless renderer, a mocked API,
-   a fake device) returns data that looks real and has produced both a false alarm and a
+   honestly, because an environment with stubbed services (a display-less renderer, a mocked
+   API, a fake device) returns data that looks real and has produced both a false alarm and a
    flawed capture called "correct".
 5. **Findings go out immediately, and so does intent.** An `ISSUE` line the moment something is
    noticed, not in the final report thirty minutes later. A `STATUS PLAN` line before each item
@@ -126,8 +132,9 @@ The template on disk is the contract; the brief only supplies the values.
 8. **Independent reviewer, after every merged batch, no exceptions.** A read-only reviewer is
    told not to trust the implementer reports and to verify by reading code and running
    commands. One day six branches merged with no review, after every earlier review had found
-   real bugs the implementers reported as fine: a converter washing out colours, a test runner
-   passing broken tests four ways, colliders you could walk through, a click firing on release.
+   real bugs the implementers reported as fine: a converter corrupting its output, a test runner
+   passing broken tests four ways, a boundary check that let things through, a click firing on
+   release.
 9. **One writer per shared document.** A spec that several agents would edit goes to one
    agent per batch, or each agent writes `docs/notes/<task>.md` and the controller folds the
    notes in afterwards.
@@ -136,16 +143,20 @@ The template on disk is the contract; the brief only supplies the values.
     cleanup once deleted another's helper scripts mid-run. Reviewers never put probe files in
     the repository; a probe test dropped into the test folder hung the controller's suite run.
 11. **Exclusive resources are locked, briefly, through one helper.** Every project has things
-    only one agent can use at a time (a render or capture window, a single test database, an
+    only one agent can use at a time (a display or capture window, a single test database, an
     emulator or device, a rate-limited API, a licensed tool, the shared browser pane). The
     controller identifies them when partitioning and lists them in the brief. When the machine
-    has several interchangeable instances of one (two GPUs, two phones, two test databases),
+    has several interchangeable instances of one (two build machines, two devices, two test
+    databases),
     the controller lists them in `.agent-mail/resources.conf` so two agents can work at once
     instead of queueing. Agents run the step that needs the resource through
     `.agent-mail/lock_run.sh <task> <resource> <command...>`, which waits, never runs without
     the lock, frees only its own lock, takes over stale ones, and hands the chosen instance to
     the command. Hand-written locking failed repeatedly: commands ran after a failed acquire,
     agents deleted each other's locks, and measurements were silently taken on shared hardware.
+    When one holder can leave the resource in a changed state (a process still running, a
+    setting changed), the controller adds a project-side `.agent-mail/hooks/<resource>.release`
+    (and optionally `.acquire`) that returns it to a known state; see PROTOCOL.md.
 12. **Instructions must be seen before they matter.** Agents read the reply file in the same
     shell command as every commit and before any step longer than five minutes; every
     `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
@@ -167,7 +178,7 @@ trivial: one allowlist, one port, one model; still write them down, the brief ne
 each task decide the allowlist, port, model, and items. If two tasks need the same file, either
 combine them into one task or give the file to one task and let the other log an `ISSUE`
 describing the change it wanted. List every **exclusive resource** this project has by
-name (a render or capture window, a test database, an emulator, a rate-limited API, a
+name (a display or capture window, a test database, an emulator, a rate-limited API, a
 licensed tool, the shared browser pane); agents lock those and only those. Mark subjective
 items `options-first` so the agent builds labelled variants instead of guessing.
 
@@ -379,9 +390,9 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - Behavior bugs need a runtime check, not just a unit test. Ask for the concrete evidence
   that would convince a skeptic: a screenshot, a logged value before and after, a measured
   number.
-- Game engines animate on real time. An agent that fast-forwards frames in a loop to speed up
-  a check sees every animation freeze and reports a false failure. Checks need real delays
-  between frames.
+- Anything driven by real time (animations, timers, schedulers, simulations) needs real time
+  to pass. An agent that fast-forwards steps in a loop to speed up a check sees everything
+  freeze and reports a false failure. Checks need real delays between steps.
 - Tell the agent how to start the app on its port and which existing preview config, if any,
   it must not reuse.
 - Browser automation tools (the Claude browser pane) are one shared pane for every agent in
@@ -390,15 +401,15 @@ the reason to run the skill at all, and they do not depend on how many agents th
   With five or six agents the pane still thrashes (tabs swapped, screenshots timing out), so
   plan rounds so that at most two or three tasks need the browser, give pure-module tasks
   "no runtime evidence needed", and tell agents to pass their tab id on every single call.
-- A background browser tab suspends `requestAnimationFrame`, so an engine's update loop never
-  runs there even though scene creation did. The template tells agents to front the tab or
+- A background browser tab suspends `requestAnimationFrame`, so a page's update loop never
+  runs there even though its setup did. The template tells agents to front the tab or
   drive the update function themselves with real time deltas. Expect the report to say which.
 - Pure data tasks (encoding a table, writing config) need no runtime evidence; say so
   explicitly in the brief so the agent does not start a server for nothing.
-- Stubbed environments lie. Anything with stubbed services (a headless renderer, a mocked
-  API, a fake device, an in-memory database) returns data that looks real. Example: a headless
-  renderer returned an empty instance buffer, a correct scene looked broken, and an agent
-  raised a false alarm. Any claim about what a user would see or get needs evidence from the
+- Stubbed environments lie. Anything with stubbed services (a display-less renderer, a mocked
+  API, a fake device, an in-memory database) returns data that looks real. Example: a stub
+  returned an empty buffer, correct output looked broken, and an agent raised a false alarm.
+  Any claim about what a user would see or get needs evidence from the
   real environment that the agent opens and describes, flaws included. Say in the notes how
   to launch the real thing on this project, and name it under `EXCLUSIVE` if only one agent
   can use it at a time.
@@ -410,7 +421,7 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - `git stash` is shared across every worktree of a repository, so an agent's stash surfaces in
   another agent's checkout, and OneDrive has blocked `git stash -u` outright. Agents park work
   as a WIP commit instead; the templates say so.
-- Python on Windows writes CRLF and the system code page by default and once broke a GDScript
+- Python on Windows writes CRLF and the system code page by default and once broke a script
   file with cp1252 characters. Files are written as UTF-8 with LF; the templates say so.
 - Long paths break temp worktrees and clones. Keep the scratchpad path short if you can, and
   tell agents to keep their scratch folder names short.
@@ -441,5 +452,8 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
   `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
 - `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/lock_run.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
-  at run time the mailbox also holds `.watch-state` and `locks/`)
+  at run time the mailbox also holds `.watch-state`, `locks/`, and the project's own
+  `resources.conf` and `hooks/`, which never come from the skill)
 - `scripts/setup.sh` (reset, `--add`, `--force`), `scripts/cleanup.sh`
+- `tests/lock_run_test.sh` (run with `bash tests/lock_run_test.sh`; about 1-2 minutes on
+  Windows, where each process start is slow)
