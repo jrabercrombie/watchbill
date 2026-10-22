@@ -23,7 +23,7 @@ that project's `.agent-mail/`, never in the skill.
   stop a locked run early (`kill -TERM <pid>` from bash, never a hard kill) is in PROTOCOL.md and
   the implementer template. Tests 14 and 15 in `tests/lock_run_test.sh` fail without the fix.
 - **2026-10-22**: two corrections. (1) The skill is generic: wording tied to one kind of project
-  (rendering, artwork, visual work, device-specific examples) was replaced with domain-neutral
+  (wording tied to one kind of project) was replaced with domain-neutral
   examples; resources are just resources. (2) The page keeper runs its own read-only watcher,
   not `watch.sh` (which stops other watchers), under `timeout` just under the monitor limit, and
   on stop ends the watcher's whole process tree and verifies by listing processes. A real run on
