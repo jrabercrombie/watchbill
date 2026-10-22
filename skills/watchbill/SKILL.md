@@ -15,6 +15,19 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-21, later**: two additions. (1) An optional **page keeper**: a long-running agent that
+  owns a user-facing status and decisions page. Its controller had tried to keep such a page
+  current itself, fell a whole day behind, claimed decisions were on the page that were not, and
+  once forgot to resume the writer after a pause; a dedicated keeper with its own watcher and a
+  per-project handbook fixed all three. New "Page keeper (optional)" section,
+  `templates/page-keeper.md`, and a setup question. (2) **Model policy set by the user, by type of
+  work**, replacing the per-task suggestion default that leaned to the strongest model: setup
+  shows a tier table with example work, the user's answer is recorded in the project, and every
+  dispatch names the tier and why. New `MODEL` line in the dispatch brief. The user also asked
+  for **spot checks**: the best model samples cheaper agents' work so a quiet failure on a
+  cheaper tier is caught early (see "Roles and models"), and for **plain outcome feedback**: the controller tells the user
+  whether each agent succeeded, partly succeeded, or failed, with how it was verified (see
+  "Tell the user how each agent did").
 - **2026-10-21**: clean up after yourself, as long as nothing is using the resource. After 113
   orphaned watcher processes, duplicate polling loops, and orphaned test shards piled up
   overnight on Windows: `watch.sh` exits by itself just under the 30-minute Monitor limit,
@@ -72,32 +85,57 @@ that project's `.agent-mail/`, never in the skill.
 | Role | Model | Where it works | Writes |
 |------|-------|----------------|--------|
 | Controller (you) | the session's model | main checkout on the integration branch | only `.agent-mail/<task>.reply` files, staging merges, worktree cleanup |
-| Implementer | chosen per task (below) | `.worktrees/<task>` on branch `<task>` | its allowlist, its own `inbox-<task>.log` |
-| Reviewer | the strongest model you can afford: `opus`, or `fable` for a high-stakes batch | main checkout, read-only | its own `inbox-review-<batch>.log` only |
-| Merge agent | same as the task's implementer | `.worktrees/<task>` | conflict resolution on branch `<task>` |
+| Implementer | the tier the model policy gives its type of work (below) | `.worktrees/<task>` on branch `<task>` | its allowlist, its own `inbox-<task>.log` |
+| Reviewer | a strong tier: `opus` by default, `fable` for a high-stakes batch | main checkout, read-only | its own `inbox-review-<batch>.log` only |
+| Merge agent | per the policy; `sonnet` by default (well-specified: resolve conflicts, run the suite) | `.worktrees/<task>` | conflict resolution on branch `<task>` |
 
-**State the model plan before dispatching, and offer the alternatives.** The brief carries a
-model for each task. Decide it in the partition step using the suggestions below, then, in
-the same message that presents the partition, tell the user which model each task gets and
-why, and offer the other options with their cost implication: the cheaper plan (what it
-risks), the stronger plan (what it costs). The user picks against their budget; a dispatch
-that surprises them on either quality or spend is a failure of this step, not of the model.
+**The user sets the model policy, by type of work; you do not guess it per task.** At setup
+(step 0) show the user the tier table below, with its example work, and ask for their policy:
+which tier for which kind of work. An earlier version suggested a model per task and leaned to
+the strongest one for implementers; the user then had to correct it round after round, and a
+dispatch that surprises them on quality or spend is a failure of this step. Record the answer in
+the project, in `.agent-mail/models.conf` (one line per tier: tier, model, work types) or in the
+project's own notes or memory, and read it before every dispatch. `setup.sh` reset leaves that
+file alone.
 
-- `opus` (Claude Opus 5.5) for judgment-heavy work: multi-file changes, anything subjective
-  (look, feel, copy, API shape), a brief that cannot fully specify the answer. A stronger implementer
-  finishes in fewer turns and fewer fix rounds, and one avoided fix round (an implementer
-  dispatch plus a reviewer pass) pays for its price gap over Sonnet.
-- `sonnet` for well-specified work: a single-file fix with a clear test, data encoding, config.
-- `haiku` for trivial edits: doc nits, renames.
-- Reviewer: the strongest model you can afford. Review is cheaper than implementation (one
-  pass over a merged tree, no fix rounds) and a strong reviewer catches more. `opus` by
-  default; `fable` (Claude Fable 5.1) when the batch is large or a miss would be expensive.
-  Its independence comes from a fresh context and the "do not trust the reports" rule, not
-  from being a different model than the implementer.
+| Tier | Model | Example work |
+|------|-------|--------------|
+| Light | `haiku` | lookups ("what draws this object"), code or doc surveys, log or transcript analysis, doc edits, simple renders |
+| Standard | `sonnet` | well-specified work with a test or a number to hit: tools and generators, measurements, probe fixes, merge agents, the page keeper |
+| Strong | `opus` (Claude Opus 5.5) | look and feel, work spanning several systems, visual judgment and vetting, diagnosis of unclear bugs, the final reviewer before landing |
+| Strongest | `fable` (Claude Fable 5.1) | the highest-stakes review: a large batch, or one where a miss would be expensive |
+
+The table is the default offer. It is a default, not a limit: the user may move any work type
+to any tier (newer models change what each tier can be trusted with), rename the tiers, or
+put everything on one model.
+
+- **Every dispatch line names the tier and why**, in the message that tells the user what was
+  dispatched ("task-b: Standard, a generator with a number to hit") and in the brief's `MODEL`
+  line. The reason is what lets the user correct the policy instead of the single dispatch.
+- **A standing user policy overrides per-task suggestions.** If a task looks mis-tiered, say so
+  and ask; do not quietly choose differently.
+- **Check Haiku's numbers before relaying them.** Counts, sizes, and timings from a Light-tier
+  survey are confirmed by a command or a second look; its locations and summaries are usually
+  fine.
+- **Do not restart a running agent just to change its model.** The restart throws away its
+  context and its place in the item. Switch at the next dispatch or at a pause.
+- Reviewer: a strong tier by default, the strongest when the batch is large or a miss would be
+  expensive. Review is cheaper than implementation (one pass over a merged tree, no fix rounds)
+  and a strong reviewer catches more. Its independence comes from a fresh context and the "do
+  not trust the reports" rule, not from being a different model than the implementer.
+- **Spot checks.** Cheaper tiers only stay trustworthy if someone looks. The best model
+  available (`opus`, or `fable` for high stakes) samples the work of agents on cheaper tiers.
+  Code is already covered: the post-merge reviewer (step 7) runs on the strongest tier whatever
+  tier wrote the code. For non-code output (page keeper writes, measurements, image vetting,
+  lookups), a strong agent re-verifies one or two claims per cheaper agent per batch against the
+  primary source (the page itself, the measuring command, the image, the code the lookup named),
+  and makes an early check when an agent starts a long job, since a wrong start is cheapest to
+  catch in the first minutes. A miss widens the check to that agent's whole output, and the fix
+  goes into its brief or handbook so the same miss does not recur. Dispatch these checks as
+  small read-only tasks on the strong tier; report their results to the user with the dispatch
+  lines.
 - Controller: this session's model. Coordination is the smallest share of the spend and a
   misjudgment there costs the most.
-- Whatever the user chooses stands for the round, and a standing preference they state
-  (for example, every agent on the strongest model) stands across rounds without re-asking.
 
 Opus 5.5 defaults to `medium` effort; pass a higher effort explicitly for implementation with
 runtime verification, or it will under-think exactly the tasks it was chosen for. A run of
@@ -198,10 +236,21 @@ The template on disk is the contract; the brief only supplies the values.
 
 ## Controller loop
 
+### 0. Ask the setup questions
+Once per project (read the recorded answers on later rounds instead of asking again):
+
+1. **Model policy.** Show the tier table from "Roles and models" and ask which tier the user
+   wants for which kind of work; record the answer (`.agent-mail/models.conf` or the project's
+   notes).
+2. **Page keeper.** Ask whether they want a user-facing page kept current by a dedicated agent
+   (see "Page keeper (optional)"). Offer it plainly when the round is long, has several agents,
+   or the user makes decisions during it; say what it costs (one agent for the round, Standard
+   tier by default). If yes, get the page URL and where its handbook lives.
+
 ### 1. Partition
 Group the plan's items into tasks with disjoint file sets. With one task the partition is
-trivial: one allowlist, one port, one model; still write them down, the brief needs them. For
-each task decide the allowlist, port, model, and items. If two tasks need the same file, either
+trivial: one allowlist, one port, one tier; still write them down, the brief needs them. For
+each task decide the allowlist, port, tier (from the user's policy), and items. If two tasks need the same file, either
 combine them into one task or give the file to one task and let the other log an `ISSUE`
 describing the change it wanted. List every **exclusive resource** this project has by
 name (a display or capture window, a test database, an emulator, a rate-limited API, a
@@ -257,7 +306,7 @@ run's bill. Instead send each agent a short **brief**: the values that fill the 
 one instruction to read the template file itself. `templates/dispatch-brief.md` is the shape;
 copy it, fill it, and launch all Agent calls **in one message** so they run concurrently.
 
-The brief carries: `TASK`, `BRANCH`, `WORKTREE`, `MAIL`, `INTEGRATION`, `PORT`, `SCRATCH`
+The brief carries: `TASK`, `MODEL` (tier and the reason), `BRANCH`, `WORKTREE`, `MAIL`, `INTEGRATION`, `PORT`, `SCRATCH`
 (this session's scratchpad directory, from your system prompt; each agent uses only
 `<scratchpad>/<task>/`), `EXCLUSIVE` (the lock-file resources, or `none`), the allowlist, the
 read-only context files, `OTHER_TASKS`, the items pasted verbatim from the plan with the
@@ -379,6 +428,24 @@ a leftover, and `--kill` takes it. Apply any ISSUE-listed edits that were skippe
 into the shared doc, and tell the user what merged, what the reviewer found, and what is still
 open.
 
+### 10. Tell the user how each agent did
+Do this as each event happens, not only at wrap-up. When each agent finishes (its final report
+or `DONE ALL` landing, a paused agent's report, a fix agent's report), and after each spot
+check and each review, tell the user plainly whether it **succeeded, partly succeeded, or
+failed**. Every such message has:
+
+- **Result**: which of the three, in the first words.
+- **How it was verified**: the tests (the runner's final line), measured numbers, captures the
+  reviewer or you opened; say so when something rests only on the agent's own claim.
+- **What failed or is still open, and what happens next**: the failing item, the follow-up
+  dispatch, or the decision waiting on the user.
+- **For a spot check**: whether that agent's claims held up, and which ones were re-verified.
+
+No silent finishes: an agent that completes and merges without a word to the user leaves them
+guessing whether anything happened. A failure is reported as a failure, in those words, not as
+"mostly done" or buried in a list of merges. If a page keeper runs, the same message also goes
+to it as an event.
+
 ## Decision log
 
 The controller keeps `docs/DECISIONS.md` on the integration branch (a project may name another
@@ -401,6 +468,40 @@ Add a `Decided:` line when the user decides and a `Done:` line after each dispat
 commit the log with the merge or on its own. Do not log agent-internal steps, statuses, or
 reviewer findings; the mailbox and reports hold those.
 
+## Page keeper (optional)
+
+Some users want a page (for example a hosted status board with a small database) that shows
+what each agent is doing, highlights with real times, and the decisions waiting on them, with
+images whose labels match the options, and that they answer on. Keeping it current is a job of
+its own. On one project the controller kept it up itself, fell a whole day behind, claimed
+decisions were on the page when they were not, and once forgot to resume the writer after a
+pause. A dedicated long-running **page keeper** agent fixed all three.
+
+**Offer it at setup** (step 0) and run it only if the user says yes. Dispatch it from
+`templates/page-keeper.md` like any other agent, with its own inbox, reply file, and scratch
+folder; it needs no task worktree.
+
+**It owns:** every write to the page and its data, and the per-project handbook (for example
+`docs/PAGE_KEEPER.md`: page URL, data schemas with examples, media rules, the event-to-write
+mapping, don'ts, failure modes, and a cold-start checklist) so a replacement can take over with
+no other context. It runs its own mailbox watcher and writes the page on every event: agent
+`PLAN`, `PROGRESS`, `DONE`, and `ISSUE` lines, merges, lands, and findings.
+
+**It never** makes decisions, picks, or default changes, and never writes as the user. A pick
+on the page is the user's; the keeper records only what the user actually chose.
+
+**The controller's duties:**
+- Report each agent's outcome to the user (step 10), and send the keeper the same event.
+- Send the keeper the events it cannot see in the mailbox (merges, lands, reviewer findings) and
+  the user's words, directly and at once, not only by reply file.
+- Resume the keeper after every pause or restart; check it is running in the same step that
+  restarts the watcher.
+- Read the user's picks from the page at the start of every user turn, and treat the page, not
+  memory, as the record of what is pending. Never claim something is on the page without
+  reading it.
+- Never hand-edit the page while a keeper runs; a second writer makes the keeper's state wrong.
+  Send it the change instead.
+
 ## Resuming after a session restart
 
 Background agents and the watcher do not survive a session restart, but their worktrees,
@@ -418,7 +519,9 @@ commits, and mailbox lines do. On resume:
 4. A stopped agent cannot be messaged back to life. Dispatch a fresh one with the same brief
    plus a paragraph naming the commits already on the branch and the item to start from, and
    tell it to number its statuses after the last one in the inbox.
-5. Merge finished branches as usual; a branch whose agent died mid-item is still safe to merge
+5. If a page keeper was running, resume it with its handbook (it does not survive a restart
+   either) before anything else writes to the page.
+6. Merge finished branches as usual; a branch whose agent died mid-item is still safe to merge
    if its last commit was green, which the rules guarantee.
 
 ### Single task
@@ -480,24 +583,27 @@ the reason to run the skill at all, and they do not depend on how many agents th
 ## Checklist
 
 - [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files; exclusive resources named
-- [ ] Model plan stated per task with the cheaper and stronger alternatives and their cost; user's choice recorded in each brief
+- [ ] Model policy asked once and recorded (`models.conf` or project notes); each dispatch names its tier and why, in the message and the brief's `MODEL` line
+- [ ] Page keeper asked about at setup; if running: events sent to it, resumed after every pause, picks read from the page each user turn, no hand edits
 - [ ] `setup.sh` run once (reset) at round start; `--add` for any task added mid-round; worktrees exist; setup command succeeded in each
 - [ ] Monitor started on `timeout 1790 bash .agent-mail/watch.sh`; `sweep.sh --kill` before each re-arm; re-armed without `--replay` when it expires
 - [ ] `sweep.sh --kill` after each `DONE ALL` report and each paused agent's report, and at wrap-up; each report's cleanup proof lists the process trees the agent stopped
-- [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the model chosen for that task (explicit effort for Opus)
+- [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the tier's model for that type of work (explicit effort for Opus)
 - [ ] Every STATUS PLAN answered with ACK or a correction; every PROGRESS read, not answered; every QUESTION answered, or its default accepted consciously; every PICK shown to the user; every mandatory instruction sent as a numbered reply; every STATUS/DONE checked for the NOTEs it lists
 - [ ] Scope moves told to both agents with the file ownership; user feedback relayed as a verbatim `(USER)` quote
 - [ ] Integration green after each fast-forward, or the red test quarantined with reason and owner
 - [ ] Each DONE merged into staging; suite, typecheck, and build green there before integration fast-forwards
 - [ ] Reviewer dispatched on the batch, told not to trust reports; never skipped
+- [ ] Spot checks: a strong agent re-verified 1-2 claims per cheaper-tier agent's non-code output this batch, and checked early on long jobs; a miss widened the check and updated the brief or handbook
 - [ ] FAIL items dispatched as fixes, re-merged, re-tested
 - [ ] Decision log updated: a `Decided:` line for each user decision, a `Done:` line for each dispatch and merge, all in plain words
+- [ ] The user told, as each happened, whether each agent and each spot check or review succeeded, partly succeeded, or failed, with how it was verified and what happens next
 - [ ] Follow-ups decided before cleanup; worktrees (including `_staging`) and branches removed; skipped edits and notes folded in; user told what is open
 
 ## Files in this skill
 
 - `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
-  `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
+  `templates/reviewer.md`, `templates/merge-agent.md`, `templates/page-keeper.md` (what the agent reads from disk)
 - `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/lock_run.sh`, `mailbox/proc_lib.sh`,
   `mailbox/sweep.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
   at run time the mailbox also holds `.watch-state`, `.watch.pid`, `locks/`, and the

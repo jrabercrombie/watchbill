@@ -9,6 +9,7 @@ round. Your full contract is in a file. Before anything else:
 ## Values
 
 - TASK: {{TASK}}
+- MODEL: {{MODEL}} (the tier from the user's model policy and why, e.g. `Standard: a generator with a number to hit`)
 - BRANCH: {{BRANCH}}
 - WORKTREE: {{WORKTREE}}
 - INTEGRATION: {{INTEGRATION}}
