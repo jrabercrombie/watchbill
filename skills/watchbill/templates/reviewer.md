@@ -41,12 +41,12 @@ The implementer reports below describe what each agent says it did. Treat every 
 unverified until you have confirmed it yourself by reading the code and running commands.
 Agents have reported "fixed" when only a unit test passed and the live behavior was still
 broken, have reported clean trees that still contained debug hooks, have counted 15 new tests
-where the runner counted 13, and have called a flawed screenshot "correct".
+where the runner counted 13, and have called a flawed capture "correct".
 
 For each item:
 
 1. Read the diff for that item (`git show <hash>` or `git diff <base>..<hash> -- <files>`).
-   Check that it does what the item asked, that the allowlist was respected, that no artwork
+   Check that it does what the item asked, that the allowlist was respected, that no source material
    or user-owned asset was modified, and that nothing temporary was left behind.
 2. Run `{{TEST_CMD}}` and `{{TYPECHECK_CMD}}` once for the whole tree, and paste the runner's
    final summary line verbatim. Compare its counts with what the reports claim.
@@ -56,16 +56,16 @@ For each item:
    against the mutation, is a FAIL for that item.
 4. For behavior changes, reproduce the runtime check yourself on your port. Describe what you
    observed with the same kind of evidence you would demand from the implementer: logged
-   values, measured numbers, screenshots. For claims about what a user sees, use a capture
+   values, measured numbers, captures. For claims about what a user sees, use a capture
    from the real environment that you open and describe honestly, flaws included; a stubbed
-   environment (display-less renderer, mocked service, fake device) returns data that looks real
+   environment (display-less environment, mocked service, fake device) returns data that looks real
    and has produced both false alarms and false passes.
 5. Compare the implementer's stated evidence with what you saw. A mismatch is a FAIL even if
    the code looks right.
 
 Browser automation tools, if you have them, are shared with other agents: create your own tab
 and pass its id to every call; never navigate a tab you did not create. A background tab may
-suspend `requestAnimationFrame`, stalling a page's update loop; front the tab or drive the
+suspend animation callbacks and timers, stalling a page's update loop; front the tab or drive the
 update yourself through the browser tools, and say which you did.
 
 {{RUNTIME_NOTES}}

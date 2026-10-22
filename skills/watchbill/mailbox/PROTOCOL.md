@@ -112,8 +112,8 @@ functions and telling each other with `TO` lines when a signature changed.
 ## Options for subjective work
 
 When an item is marked `options-first` (look, feel, wording, an API shape, anything where the
-user will want to choose), do not pick for them. Build the variants as switchable knobs,
-produce a labelled comparison (screenshots or a table, in your scratch folder or the report),
+user will want to choose), do not pick for them. Build the variants as switchable variants (for example a config flag),
+produce a labelled comparison (captures or a table, in your scratch folder or the report),
 commit with the **old** behaviour as the default, then ask:
 
 ```
@@ -122,14 +122,14 @@ commit with the **old** behaviour as the default, then ask:
 
 Poll for the reply as for any question, keep working on other items, and apply the pick
 before your next commit if it arrives; if it has not arrived by the final report, say so and
-leave the knobs in place for the controller to switch. One guessed variant was reworked from
+leave the variants in place for the controller to switch. One guessed variant was reworked from
 scratch; three labelled ones were chosen from in a single reply.
 
 ## Exclusive resources
 
-Every project has things only one agent can use at a time: a display or capture window, a
-single test database, an emulator or device, a rate-limited API, a licensed tool, the shared
-browser pane. The controller names this project's under `EXCLUSIVE` in the brief. These, and
+Every project has things only one agent can use at a time: a capture or display window, a
+single test database, a device or emulator, a rate-limited API, a licensed tool, a shared
+service, the shared browser pane. The controller names this project's under `EXCLUSIVE` in the brief. These, and
 only these, use a lock file `locks/<resource>` holding your task name and a timestamp. Before
 "wait 30 s and retry" became this rule, several agents needing the same window collided and
 produced garbage captures.
@@ -169,6 +169,16 @@ reported on stderr and never keeps the lock held or changes the command's exit c
 belong to the project, not to this protocol; agents never write or edit them unless their
 brief says so.
 
+**Stopping a locked run early.** Send `kill -TERM <lock_run pid>` from bash: its trap stops the
+command's whole tree, runs the release hook, and frees the lock. **Never hard-kill it**
+(`taskkill /F`, `kill -KILL`): no trap runs, and on Windows the command's Git Bash children are
+not in the Windows process tree, so they survive and keep using the resource. In one incident
+an agent hard-killed a locked run on an exclusive device; the next waiter took the lock as
+stale while the old command's children kept using the device for about 2.5 minutes, overlapping
+the new holder. As a safety net, `lock_run.sh` records the command's pids in the lock folder;
+on release, and before taking over a dead holder's lock, it stops every recorded process still
+running.
+
 To update `lock_run.sh` while any agent may be inside it, write the new version to a temporary
 file next to it and rename it over the old one; editing or copying over it in place makes
 running copies read the new bytes mid-run (bash reads a script as it goes).
@@ -202,7 +212,9 @@ whose wrapper had been stopped piled up and put half the CPU in the kernel.
 - **Exclusive resources**: `lock_run.sh` records the holder's pid in the owner file. A lock
   whose holder is gone is taken over at once; a lock whose holder is alive is never taken over.
   If the command is stopped, its whole tree is stopped before the lock is released, so no
-  orphan keeps using the resource.
+  orphan keeps using the resource. Its pids are recorded in the lock folder: release, and a
+  takeover of a dead holder's lock, stop any that survived (for example after a hard kill).
+  Never hard-kill a locked run; stop it with `kill -TERM <lock_run pid>` from bash.
 - **`sweep.sh`** (dry run by default, `--kill` to act) lists and stops what this mailbox left
   behind and nothing else: watcher pipelines whose shell is gone, polling loops whose shell is
   gone or whose task is finished, and processes started from the worktree of a finished task.

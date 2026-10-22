@@ -33,6 +33,13 @@
 # process that started it disappears), the command's whole process tree is stopped before the
 # lock is released, so no orphan keeps using the resource. On Windows the tree is stopped
 # with taskkill /T as well, because stopping a Git Bash shell leaves its children running.
+# The command's pids are recorded in the lock folder (<lock>/tree), about a second after it starts
+# and then every PL_GUARD_SEC seconds. Release, and any takeover of a dead holder's lock, stops
+# every recorded process that is still running before the lock changes hands. This covers a hard
+# kill of this helper (on Windows `taskkill /F`, or kill -KILL): no trap runs, and the command's
+# Git Bash children are not in the Windows process tree, so they survive and keep using the
+# resource. Never hard-kill a locked run. To stop one early, `kill -TERM <lock_run pid>` from
+# bash: its trap stops the whole tree and releases the lock.
 # Starting it detached on purpose (`lock_run.sh ... &` in a shell that then exits)? Set
 # PL_KEEP_ORPHAN=1 so the caller exiting is not taken as a stop. Needs proc_lib.sh next to it;
 # without it the command runs unguarded, as before.
@@ -75,9 +82,12 @@ while [ -z "$lock" ]; do
     [ -n "$have_lib" ] && { pl_owner_alive "$f/owner"; owner_state=$?; }
     if [ "$owner_state" -eq 1 ]; then
       echo "lock_run: taking over $resource.$i, its holder is gone (owner: $(cat "$f/owner" 2>/dev/null))" >&2
+      # The dead holder's command may have survived a hard kill: stop it before taking the lock.
+      [ -n "$have_lib" ] && pl_kill_recorded "$f/tree"
       rm -rf "$f"
     elif [ "$owner_state" -eq 2 ] && [ -n "$(find "$f" -maxdepth 0 -mmin +"$stale" 2>/dev/null)" ]; then
       echo "lock_run: taking over stale $resource.$i (owner: $(cat "$f/owner" 2>/dev/null))" >&2
+      [ -n "$have_lib" ] && pl_kill_recorded "$f/tree"
       rm -rf "$f"
     fi
     # Taken over: try it again now rather than after the next wait.
@@ -145,6 +155,9 @@ release() {
   # Only our own lock: same task and, when the owner file records one, our pid.
   case "$line" in "$task "*) ;; *) return 0 ;; esac
   case " $line " in *" pid="*) [[ " $line " == *" pid=$$ "* ]] || return 0 ;; esac
+  # Whatever the command left running (a detached child, a survivor of a stop) goes before the
+  # lock does, so nothing keeps using the resource after the next holder starts.
+  [ -n "$have_lib" ] && pl_kill_recorded "$lock/tree"
   run_hook release
   rm -rf "$lock"
 }
@@ -154,6 +167,7 @@ trap 'release; exit 130' INT
 echo "lock_run: $task holds $resource.$chosen" >&2
 run_hook acquire
 if [ -n "$have_lib" ]; then
+  export PL_TREE_FILE="$lock/tree"
   pl_guarded_run release "$@"
 else
   "$@"

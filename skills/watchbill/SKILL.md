@@ -15,6 +15,19 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-22, later**: an agent hard-killed a locked run on an exclusive device. The lock freed
+  (the trap never ran, the next waiter saw a dead holder), but the command's Git Bash children
+  are not in the Windows process tree, survived, and kept using the device for about 2.5 minutes
+  alongside the next holder. `lock_run.sh` now records the command's pids in the lock folder;
+  release, and a takeover of a dead holder's lock, stop any still running first. The safe way to
+  stop a locked run early (`kill -TERM <pid>` from bash, never a hard kill) is in PROTOCOL.md and
+  the implementer template. Tests 14 and 15 in `tests/lock_run_test.sh` fail without the fix.
+- **2026-10-22**: two corrections. (1) The skill is generic: wording tied to one kind of project
+  (rendering, artwork, visual work, device-specific examples) was replaced with domain-neutral
+  examples; resources are just resources. (2) The page keeper runs its own read-only watcher,
+  not `watch.sh` (which stops other watchers), under `timeout` just under the monitor limit, and
+  on stop ends the watcher's whole process tree and verifies by listing processes. A real run on
+  Windows left bash/timeout processes after a monitor stop while a dry-run sweep reported none.
 - **2026-10-21, later**: two additions. (1) An optional **page keeper**: a long-running agent that
   owns a user-facing status and decisions page. Its controller had tried to keep such a page
   current itself, fell a whole day behind, claimed decisions were on the page that were not, and
@@ -100,9 +113,9 @@ file alone.
 
 | Tier | Model | Example work |
 |------|-------|--------------|
-| Light | `haiku` | lookups ("what draws this object"), code or doc surveys, log or transcript analysis, doc edits, simple renders |
+| Light | `haiku` | lookups ("where is this defined", "what calls this"), code or doc surveys, log or transcript analysis, doc edits, simple generated reports |
 | Standard | `sonnet` | well-specified work with a test or a number to hit: tools and generators, measurements, probe fixes, merge agents, the page keeper |
-| Strong | `opus` (Claude Opus 5.5) | look and feel, work spanning several systems, visual judgment and vetting, diagnosis of unclear bugs, the final reviewer before landing |
+| Strong | `opus` (Claude Opus 5.5) | judgment calls on subjective quality, work spanning several systems, vetting of generated or captured output, diagnosis of unclear bugs, the final reviewer before landing |
 | Strongest | `fable` (Claude Fable 5.1) | the highest-stakes review: a large batch, or one where a miss would be expensive |
 
 The table is the default offer. It is a default, not a limit: the user may move any work type
@@ -126,9 +139,9 @@ put everything on one model.
 - **Spot checks.** Cheaper tiers only stay trustworthy if someone looks. The best model
   available (`opus`, or `fable` for high stakes) samples the work of agents on cheaper tiers.
   Code is already covered: the post-merge reviewer (step 7) runs on the strongest tier whatever
-  tier wrote the code. For non-code output (page keeper writes, measurements, image vetting,
+  tier wrote the code. For non-code output (page keeper writes, measurements, output vetting,
   lookups), a strong agent re-verifies one or two claims per cheaper agent per batch against the
-  primary source (the page itself, the measuring command, the image, the code the lookup named),
+  primary source (the page itself, the measuring command, the output, the code the lookup named),
   and makes an early check when an agent starts a long job, since a wrong start is cheapest to
   catch in the first minutes. A miss widens the check to that agent's whole output, and the fix
   goes into its brief or handbook so the same miss does not recur. Dispatch these checks as
@@ -154,18 +167,18 @@ The template on disk is the contract; the brief only supplies the values.
 2. **Unique dev-server port per agent, and never stop a server you did not start.** An agent
    once killed another agent's server because it looked stray.
 3. **File allowlists.** Every prompt names the files the agent may edit. Anything else needs a
-   `CLAIM` line first. Never modify source artwork or user-owned assets; fix alignment or
+   `CLAIM` line first. Never modify source materials or user-owned assets; fix alignment or
    behavior through code, config, or data.
 4. **Evidence, not claims.** Tests and typecheck clean before every commit; a runtime check
-   with described evidence for any behavior change (screenshots, logged values, measured
+   with described evidence for any behavior change (captures, logged values, measured
    numbers); a "Deviations and concerns" section; an "Issues found" section; proof that
    temporary hooks and scratch files are gone. Agents have said "fixed" on unit tests alone
    while the live behavior was still broken. Three refinements from later runs: test counts
    are the runner's final line pasted verbatim (a report said 15 new tests, the runner said
    13); every new test comes with a mutation proof, shown failing against a deliberate break
    of the code it guards (the reviewer kept finding tests that could not fail); and any claim
-   about how something looks needs a windowed capture the agent opened and described
-   honestly, because an environment with stubbed services (a display-less renderer, a mocked
+   about what a user sees or gets needs a capture from the real environment that the agent
+   opened and described honestly, because an environment with stubbed services (a display-less environment, a mocked
    API, a fake device) returns data that looks real and has produced both a false alarm and a
    flawed capture called "correct".
 5. **Findings go out immediately, and so does intent.** An `ISSUE` line the moment something is
@@ -195,8 +208,8 @@ The template on disk is the contract; the brief only supplies the values.
     cleanup once deleted another's helper scripts mid-run. Reviewers never put probe files in
     the repository; a probe test dropped into the test folder hung the controller's suite run.
 11. **Exclusive resources are locked, briefly, through one helper.** Every project has things
-    only one agent can use at a time (a display or capture window, a single test database, an
-    emulator or device, a rate-limited API, a licensed tool, the shared browser pane). The
+    only one agent can use at a time (a capture or display window, a single test database, a
+    device or emulator, a rate-limited API, a licensed tool, the shared browser pane). The
     controller identifies them when partitioning and lists them in the brief. When the machine
     has several interchangeable instances of one (two build machines, two devices, two test
     databases),
@@ -253,7 +266,7 @@ trivial: one allowlist, one port, one tier; still write them down, the brief nee
 each task decide the allowlist, port, tier (from the user's policy), and items. If two tasks need the same file, either
 combine them into one task or give the file to one task and let the other log an `ISSUE`
 describing the change it wanted. List every **exclusive resource** this project has by
-name (a display or capture window, a test database, an emulator, a rate-limited API, a
+name (a capture or display window, a test database, a device, a rate-limited API, a
 licensed tool, the shared browser pane); agents lock those and only those. Mark subjective
 items `options-first` so the agent builds labelled variants instead of guessing.
 
@@ -326,7 +339,7 @@ the template already says (mailbox rules, evidence rules, report format) is neve
 | `STATUS #n PROGRESS` | Read it; check the `applied NOTE@` suffix. Reply only to correct something. With seven agents, answering every progress line was most of the controller's effort and none of its value. |
 | `ISSUE` | Read it. If it needs a decision now, write a reply. Otherwise note it for the review or the post-merge list. |
 | `QUESTION #n` | Decide, then append `#n: <answer>` to `.agent-mail/<task>.reply`. The agent proceeds on its default after 8 minutes, so answer promptly or accept the default. |
-| `QUESTION #n PICK` | An options-first item is ready. Show the user the comparison and relay their choice as `#n: B`, quoting any reason verbatim. If it arrives after the agent's report, switch the knob yourself after merge. |
+| `QUESTION #n PICK` | An options-first item is ready. Show the user the comparison and relay their choice as `#n: B`, quoting any reason verbatim. If it arrives after the agent's report, switch the variant yourself after merge. |
 | `TO <other>` | Nothing, unless the target has already finished or is not running; then relay by reply file to whoever needs it. |
 | `CLAIM` | Check for a conflicting claim from another agent. If there is one, reply to the later claimant to skip and log an ISSUE. |
 | `DONE` | Progress only (one per item). Nothing to do. |
@@ -463,7 +476,7 @@ Keep it minimal: one line per entry, newest last, under a date heading.
 Write every entry as a plain description a reader can understand months later without the
 conversation. Never refer to a choice by its label from an options round ("option B", "variant
 2", "N1"): write what was chosen ("soft shadow edges", not "B"). Quote the user briefly when the
-wording matters. Point at commits, files, and screenshots instead of repeating their content.
+wording matters. Point at commits, files, and captures instead of repeating their content.
 Add a `Decided:` line when the user decides and a `Done:` line after each dispatch and merge, and
 commit the log with the merge or on its own. Do not log agent-internal steps, statuses, or
 reviewer findings; the mailbox and reports hold those.
@@ -472,7 +485,7 @@ reviewer findings; the mailbox and reports hold those.
 
 Some users want a page (for example a hosted status board with a small database) that shows
 what each agent is doing, highlights with real times, and the decisions waiting on them, with
-images whose labels match the options, and that they answer on. Keeping it current is a job of
+attachments whose labels match the options, and that they answer on. Keeping it current is a job of
 its own. On one project the controller kept it up itself, fell a whole day behind, claimed
 decisions were on the page when they were not, and once forgot to resume the writer after a
 pause. A dedicated long-running **page keeper** agent fixed all three.
@@ -484,11 +497,17 @@ folder; it needs no task worktree.
 **It owns:** every write to the page and its data, and the per-project handbook (for example
 `docs/PAGE_KEEPER.md`: page URL, data schemas with examples, media rules, the event-to-write
 mapping, don'ts, failure modes, and a cold-start checklist) so a replacement can take over with
-no other context. It runs its own mailbox watcher and writes the page on every event: agent
+no other context. It runs its own read-only watcher (never `watch.sh`, which would stop the controller's; a
+bounded script under `timeout` just under the monitor limit, re-armed on expiry) and writes the
+page on every event: agent
 `PLAN`, `PROGRESS`, `DONE`, and `ISSUE` lines, merges, lands, and findings.
 
 **It never** makes decisions, picks, or default changes, and never writes as the user. A pick
 on the page is the user's; the keeper records only what the user actually chose.
+
+**Stopping the keeper's watcher:** the keeper ends the watcher's whole process tree and
+verifies by listing processes that none is left (a stopped monitor leaves its `timeout` and
+bash children running on Windows, and a dry-run `sweep.sh` can report none while they live).
 
 **The controller's duties:**
 - Report each agent's outcome to the user (step 10), and send the keeper the same event.
@@ -533,9 +552,9 @@ the reason to run the skill at all, and they do not depend on how many agents th
 ## Runtime verification notes (project-specific advice for `{{RUNTIME_NOTES}}`)
 
 - Behavior bugs need a runtime check, not just a unit test. Ask for the concrete evidence
-  that would convince a skeptic: a screenshot, a logged value before and after, a measured
+  that would convince a skeptic: a capture, a logged value before and after, a measured
   number.
-- Anything driven by real time (animations, timers, schedulers, simulations) needs real time
+- Anything driven by real time (timers, schedulers, animations, simulations) needs real time
   to pass. An agent that fast-forwards steps in a loop to speed up a check sees everything
   freeze and reports a false failure. Checks need real delays between steps.
 - Tell the agent how to start the app on its port and which existing preview config, if any,
@@ -543,15 +562,15 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - Browser automation tools (the Claude browser pane) are one shared pane for every agent in
   the session. The template already tells agents to create their own tab and never touch
   another's; an agent that ignores this navigates a peer's tab mid-measurement.
-  With five or six agents the pane still thrashes (tabs swapped, screenshots timing out), so
+  With five or six agents the pane still thrashes (tabs swapped, captures timing out), so
   plan rounds so that at most two or three tasks need the browser, give pure-module tasks
   "no runtime evidence needed", and tell agents to pass their tab id on every single call.
-- A background browser tab suspends `requestAnimationFrame`, so a page's update loop never
-  runs there even though its setup did. The template tells agents to front the tab or
+- A background browser tab suspends animation callbacks and timers, so a page's update loop
+  never runs there even though its setup did. The template tells agents to front the tab or
   drive the update function themselves with real time deltas. Expect the report to say which.
 - Pure data tasks (encoding a table, writing config) need no runtime evidence; say so
   explicitly in the brief so the agent does not start a server for nothing.
-- Stubbed environments lie. Anything with stubbed services (a display-less renderer, a mocked
+- Stubbed environments lie. Anything with stubbed services (a display-less environment, a mocked
   API, a fake device, an in-memory database) returns data that looks real. Example: a stub
   returned an empty buffer, correct output looked broken, and an agent raised a false alarm.
   Any claim about what a user would see or get needs evidence from the

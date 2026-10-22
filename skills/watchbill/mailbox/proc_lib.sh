@@ -76,13 +76,39 @@ pl_kill_tree() {
   pl_kill_pids "${g[@]}" "$1" $(pl_descendants "$1")
 }
 
+# pl_record_tree <file> <root-pid>: write "pid winpid" for the root and every descendant, so a
+# later process can still find them after the root is hard-killed (a hard kill runs no trap, and
+# on Windows the MSYS children are not in the Windows process tree, so they survive it).
+pl_record_tree() {
+  local f="$1" p
+  { for p in "$2" $(pl_descendants "$2"); do pl_alive "$p" && printf '%s %s
+' "$p" "$(pl_winpid "$p")"; done; } > "$f.tmp" 2>/dev/null
+  [ -s "$f.tmp" ] && mv -f "$f.tmp" "$f" || rm -f "$f.tmp"
+}
+
+# pl_kill_recorded <file>: stop every process listed by pl_record_tree that is still running
+# (a pid reused by another process is skipped when the Windows pid no longer matches).
+pl_kill_recorded() {
+  local f="$1" p w pids=""
+  [ -r "$f" ] || return 0
+  while read -r p w; do
+    pl_alive "$p" || continue
+    if [ -n "$w" ] && [ "$(pl_winpid "$p")" != "$w" ]; then continue; fi
+    pids="$pids $p"
+  done < "$f"
+  # shellcheck disable=SC2086
+  [ -n "$pids" ] && pl_kill_pids $pids
+  return 0
+}
+
 # pl_guarded_run <on_stop> <command...>
 # Runs the command (stdin kept) and returns its exit code. If this shell gets TERM or INT,
 # or if this shell or the process that started it disappears (stopped by a tool that kills
 # only the top process), the command's whole tree is stopped and <on_stop> is called (a
 # function name, or ":"). A small guardian checks every PL_GUARD_SEC seconds (default 10).
 # Set PL_KEEP_ORPHAN=1 when starting it detached on purpose, so the caller exiting does not
-# count as a stop.
+# count as a stop. With PL_TREE_FILE=<file> set, the guardian also records the command's pids
+# there (first after 1 second, then every pass) for pl_kill_recorded.
 pl_guarded_run() {
   local on_stop="$1"; shift
   local main=$$ parent=$PPID
@@ -93,8 +119,10 @@ pl_guarded_run() {
   local guard_sec="${PL_GUARD_SEC:-10}"
   (
     exec </dev/null >/dev/null 2>&1
+    if [ -n "${PL_TREE_FILE:-}" ]; then sleep 1; pl_alive "$main" && pl_record_tree "$PL_TREE_FILE" "$PL_CHILD"; fi
     while pl_alive "$main" && { [ -z "$parent" ] || pl_alive "$parent"; } && pl_alive "$PL_CHILD"; do
       sleep "$guard_sec"
+      [ -n "${PL_TREE_FILE:-}" ] && pl_alive "$main" && pl_record_tree "$PL_TREE_FILE" "$PL_CHILD"
     done
     if pl_alive "$PL_CHILD"; then
       pl_kill_tree "$PL_CHILD"

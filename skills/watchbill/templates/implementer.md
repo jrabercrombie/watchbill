@@ -41,7 +41,7 @@ are the same either way. Read this whole brief before doing anything.
 Read-only context (read, never edit, never claim): {{READ_ONLY}}
 
 Anything outside this list needs a `CLAIM` line first (see mailbox). Never modify source
-artwork or user-owned assets such as images, audio, fonts, or hand-made content; fix
+materials or user-owned assets such as data files, fixtures, or hand-made content; fix
 alignment or behavior through code, configuration, or data instead.
 
 ## Items
@@ -80,11 +80,10 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    into your notes for the report; do not count tests by hand. One report claimed 15 new tests
    when the runner said 13.
 5. For any behavior change, verify at runtime and collect evidence a skeptic would accept: a
-   screenshot, a logged value before and after, a measured number. A passing unit test is not
+   capture, a logged value before and after, a measured number. A passing unit test is not
    runtime evidence; agents have reported "fixed" on unit tests alone while the live behavior
-   stayed broken. For anything visual (how something looks, where things are placed, what
-   was drawn, what a user sees), the evidence is a capture from the real environment that you
-   open and describe in your own words. Stubbed environments lie: a display-less renderer, a
+   stayed broken. For anything a user sees or receives (output, layout, generated content), the evidence is a capture from the real environment that you
+   open and describe in your own words. Stubbed environments lie: a display-less environment, a
    mocked service, or a fake device returns data that looks real (an empty buffer from a stub
    once made correct output look broken and an agent raised a false alarm from it). Describe
    what the capture actually shows, including flaws; an early agent called a flawed capture
@@ -118,13 +117,13 @@ own inbox and the `TO` lines for you, then continue from your last line.
 ## Items marked options-first
 
 Some items are subjective (look, feel, wording, an API shape) and the user will want to
-choose. For an item marked `options-first`: build the variants as switchable knobs, produce a
-labelled comparison (screenshots or a table) in your scratch folder, commit with the **old**
+choose. For an item marked `options-first`: build the variants as switchable variants (for example a config flag), produce a
+labelled comparison (captures or a table) in your scratch folder, commit with the **old**
 behaviour as the default, and send
 `[{{TASK}}] QUESTION #n PICK: A=<label> B=<label> C=<label>; comparison at <path>; default: keep A (current)`.
 Poll for it like any question while you work on other items; apply the pick before your next
 commit if it arrives, and if it has not arrived by the final report say so and leave the
-knobs in place. Never pick for the user: a single guessed variant was reworked from scratch,
+variants in place. Never pick for the user: a single guessed variant was reworked from scratch,
 while three labelled ones were chosen from in one reply.
 
 ## Mailbox protocol
@@ -187,7 +186,7 @@ proceed as briefed.
 Browser automation tools, if you have them, are shared with the other agents: create your own
 tab (`tabs_create`) and pass its id to every call; never navigate or close a tab you did not
 create. A background tab often has `document.hidden === true`, and then
-`requestAnimationFrame` does not fire, so a page's update loop stalls while its setup still
+animation callbacks and timers do not fire, so a page's update loop stalls while its setup still
 ran once. Front your tab or drive the update function yourself from a `setInterval` with real
 `performance.now()` deltas, injected only through the browser tools, never committed. Say in
 the report which you did.
@@ -228,7 +227,11 @@ in the kernel.
   gives the Windows pid), or `source "{{MAIL}}/proc_lib.sh"; pl_kill_tree <pid>`. Then check
   that no process of yours still runs from your worktree or scratch folder.
 - Commands run through `{{MAIL}}/lock_run.sh` stop their whole tree when stopped, before the lock
-  is released; still stop the helper itself rather than leaving it waiting.
+  is released; still stop the helper itself rather than leaving it waiting. To stop a locked
+  run early, `kill -TERM <lock_run pid>` from bash (its trap stops the tree and frees the
+  lock). Never hard-kill it (`taskkill /F`, `kill -KILL`): no trap runs, and the command's
+  children can survive and keep using the exclusive resource (for example a device) while the
+  next holder starts.
 - Per-agent folders a brief asks for (an app-data or profile folder, a temporary home, a cache)
   go inside `{{SCRATCH}}/{{TASK}}/`, so deleting that folder removes them.
 

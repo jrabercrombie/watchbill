@@ -194,5 +194,35 @@ check "live holder: still waiting (rc $rc)" '[ $rc -eq 124 ] && [ ! -s "$M/out" 
 check "live holder: lock untouched" 'grep -q "^live " "$M/locks/res.1/owner"'
 rm -rf "$M"
 
+# 14. A hard-killed holder (no trap runs) leaves its command's child running. The next holder
+# must not start until that child is gone (the child would overlap it on the resource).
+fresh
+child_script
+PL_GUARD_SEC=1 bash "$M/lock_run.sh" t14 res bash "$M/child.sh" 2>"$M/stderr" & pid=$!
+wait_file "$M/child"; child="$(cat "$M/child")"
+for i in $(seq 1 60); do grep -q "^$child " "$M/locks/res.1/tree" 2>/dev/null && break; sleep 0.25; done
+check "hard kill: child recorded in the lock folder" 'grep -q "^$child " "$M/locks/res.1/tree"'
+# Hard kill: the helper, its guardian, and the command shell all die with no trap; the child lives.
+for p in $(bash -c 'source "$1"; pl_descendants "$2"' _ "$M/proc_lib.sh" "$pid"); do [ "$p" = "$child" ] || kill -KILL "$p" 2>/dev/null; done
+kill -KILL "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; sleep 1
+check "hard kill: child survived (precondition)" 'kill -0 "$child" 2>/dev/null'
+check "hard kill: lock left behind (precondition)" '[ -d "$M/locks/res.1" ]'
+out="$(bash "$M/lock_run.sh" t14b res bash -c "kill -0 $child 2>/dev/null && echo alive || echo gone" 2>"$M/stderr2")"
+check "hard kill: surviving child gone before the next holder started" '[ "$out" = gone ]'
+check "hard kill: takeover reported" 'grep -q "holder is gone" "$M/stderr2"'
+kill -KILL "$child" 2>/dev/null
+rm -rf "$M"
+
+# 15. On release, a child the command left running (detached, outliving it) is stopped.
+fresh
+printf 'sleep 300 & echo $! > "%s/child"; sleep 3
+' "$M" > "$M/leave.sh"
+PL_GUARD_SEC=1 bash "$M/lock_run.sh" t15 res bash "$M/leave.sh" 2>"$M/stderr"; rc=$?
+child="$(cat "$M/child")"
+check "release: leftover child stopped (rc $rc)" 'gone "$child" 20'
+check "release: lock released" nolock
+kill -KILL "$child" 2>/dev/null
+rm -rf "$M"
+
 echo "lock_run tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
