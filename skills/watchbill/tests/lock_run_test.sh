@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for mailbox/lock_run.sh: acquire and release hooks, and plain locking without hooks.
+# Tests for mailbox/lock_run.sh: acquire and release hooks, plain locking without hooks,
+# stopping the command's whole process tree when it is stopped, and stale-lock takeover by pid.
 #
 #   bash tests/lock_run_test.sh              tests the skill's mailbox/lock_run.sh
 #   LOCK_RUN=<path> bash tests/lock_run_test.sh   tests another copy (e.g. a mutated one)
@@ -15,6 +16,7 @@ check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "
 fresh() {
   M="$(mktemp -d)"
   cp "$src" "$M/lock_run.sh"
+  [ -f "$(dirname "$src")/proc_lib.sh" ] && cp "$(dirname "$src")/proc_lib.sh" "$M/"
   mkdir -p "$M/hooks"
   LOG="$M/hook.log"
 }
@@ -127,6 +129,69 @@ rm -rf "$M"
 fresh; make_hook release
 run t9 other true
 check "other resource: no hook run" '[ "$(count release)" = 0 ]'
+rm -rf "$M"
+
+# A command that starts a child in the background, records the child's pid, and waits.
+child_script() { printf 'sleep 300 & echo $! > "%s/child"; wait\n' "$M" > "$M/child.sh"; }
+wait_file() { for i in $(seq 1 100); do [ -s "$1" ] && return 0; sleep 0.1; done; return 1; }
+gone() { [ -n "$1" ] || return 1; for i in $(seq 1 ${2:-60}); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.25; done; return 1; }
+
+# 10. TERM to the helper stops the command's children too, before the lock is released.
+fresh
+child_script
+bash "$M/lock_run.sh" t10 res bash "$M/child.sh" 2>"$M/stderr" & pid=$!
+wait_file "$M/child"; child="$(cat "$M/child")"
+kill -TERM "$pid"; wait "$pid"; rc=$?
+check "TERM tree: exit 143" '[ $rc -eq 143 ]'
+check "TERM tree: child stopped" 'gone "$child"'
+check "TERM tree: lock released" nolock
+kill -KILL "$child" 2>/dev/null
+rm -rf "$M"
+
+# 11. The process that started the helper disappears (a tool that kills only the top shell):
+# the guardian stops the command's tree and the lock is released.
+fresh
+child_script
+bash -c "PL_GUARD_SEC=1 bash '$M/lock_run.sh' t11 res bash '$M/child.sh' 2>'$M/stderr'; echo" & wrapper=$!
+wait_file "$M/child"; child="$(cat "$M/child")"
+kill -KILL "$wrapper" 2>/dev/null; wait "$wrapper" 2>/dev/null
+check "caller gone: child was started" '[ -n "$child" ]'
+check "caller gone: child stopped" 'gone "$child" 80'
+for i in $(seq 1 40); do nolock && break; sleep 0.25; done
+check "caller gone: lock released" nolock
+kill -KILL "$child" 2>/dev/null
+rm -rf "$M"
+
+# 11b. PL_KEEP_ORPHAN=1: a caller that exits on purpose does not stop the command.
+fresh
+child_script
+bash -c "PL_KEEP_ORPHAN=1 PL_GUARD_SEC=1 bash '$M/lock_run.sh' t11b res bash '$M/child.sh' 2>'$M/stderr'; echo" & wrapper=$!
+wait_file "$M/child"; child="$(cat "$M/child")"
+kill -KILL "$wrapper" 2>/dev/null; wait "$wrapper" 2>/dev/null; sleep 3
+check "keep orphan: child still running" 'kill -0 "$child" 2>/dev/null'
+check "keep orphan: lock still held" '! nolock'
+kill -KILL "$child" 2>/dev/null
+for i in $(seq 1 40); do nolock && break; sleep 0.25; done
+check "keep orphan: lock released when the command ends" nolock
+rm -rf "$M"
+
+# 12. Owner pid recorded; a lock whose holder is gone is taken over at once.
+fresh
+out="$(run t12 res cat "$M/locks/res.1/owner")"
+check "owner file records pid" 'case "$out" in "t12 "*" pid="*) true ;; *) false ;; esac'
+mkdir -p "$M/locks/res.1"; echo "ghost 2026-01-01T00:00:00Z pid=999999 winpid=none" > "$M/locks/res.1/owner"
+t0=$SECONDS; out="$(run t12 res echo took)"; took=$((SECONDS - t0))
+check "dead holder: taken over at once (took ${took}s)" '[ "$out" = took ] && [ $took -le 10 ]'
+check "dead holder: reported" 'grep -q "holder is gone" "$M/stderr"'
+rm -rf "$M"
+
+# 13. A lock whose holder is alive is never taken over, however old.
+fresh
+mkdir -p "$M/locks/res.1"; echo "live 2026-01-01T00:00:00Z pid=$$ winpid=none" > "$M/locks/res.1/owner"
+touch -d '3 hours ago' "$M/locks/res.1"
+LOCK_STALE_MIN=1 timeout 6 bash "$M/lock_run.sh" t13 res echo stolen > "$M/out" 2>"$M/stderr"; rc=$?
+check "live holder: still waiting (rc $rc)" '[ $rc -eq 124 ] && [ ! -s "$M/out" ]'
+check "live holder: lock untouched" 'grep -q "^live " "$M/locks/res.1/owner"'
 rm -rf "$M"
 
 echo "lock_run tests: $pass passed, $fail failed"

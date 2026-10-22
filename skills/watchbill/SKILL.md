@@ -15,6 +15,20 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-21**: clean up after yourself, as long as nothing is using the resource. After 113
+  orphaned watcher processes, duplicate polling loops, and orphaned test shards piled up
+  overnight on Windows: `watch.sh` exits by itself just under the 30-minute Monitor limit,
+  runs under `timeout`, keeps one instance per mailbox, spawns almost nothing per pass, and
+  covers inboxes added later without a re-arm; new `sweep.sh` (dry run, `--kill`) stops this
+  mailbox's leftovers and spares live locks, live tasks, and the current watcher; `lock_run.sh`
+  records the holder's pid, takes over a dead holder's lock at once, never takes over a live
+  holder's, and stops a stopped command's whole tree before releasing; shared `proc_lib.sh`;
+  templates forbid polling loops and require stopping started process trees;
+  `setup.sh --update-helpers`; `cleanup.sh` sweeps the tasks it removes and takes `--scratch`.
+  Tests in `tests/sweep_test.sh` and `tests/lock_run_test.sh`. Also in this change: the
+  implementer template's earlier edits (time-stamped inbox lines, timeboxes and heartbeats,
+  `DONE ALL` quoting the last NOTE read, re-orienting after a resume, affected-tests-first
+  testing).
 - **2026-09-29**: `lock_run.sh` runs optional per-resource hooks,
   `.agent-mail/hooks/<resource>.acquire` and `.release`, so a shared device or service left in
   a changed state by one holder is returned to a known state before the next holder gets it;
@@ -169,6 +183,18 @@ The template on disk is the contract; the brief only supplies the values.
     integration fast-forwards only when green.
 14. **The controller never `cd`s.** A `cd` into a worktree moved the session's working
     directory and every later relative path with it. Use `git -C <path>` and absolute paths.
+15. **Clean up after yourself, as long as nothing is using the resource.** Every process,
+    lock, folder, and state file the round creates is removed by whoever created it once
+    nothing uses it, and the controller sweeps for what slipped through. On Windows, stopping
+    a shell kills only that shell: one night, each 30-minute re-arm of a hand-written
+    `tail -F | grep | cut` watcher left the previous pipeline running, agents left duplicate
+    `until grep ...; sleep` loops, and stopped test wrappers left their shards; 113 orphans
+    (about 583 MB) and the process churn put half the CPU in the kernel. So watchers time out
+    by themselves, agents write no polling loops and stop every tree they start,
+    `lock_run.sh` stops a stopped command's tree before releasing, and `sweep.sh` stops what is
+    left, never anything a live lock, a live task, or the current watcher is using. None of
+    this depends on the platform changing how it stops processes. What is cleaned, by whom,
+    and when is tabled in PROTOCOL.md, "Cleaning up".
 
 ## Controller loop
 
@@ -189,7 +215,7 @@ plugin install puts it under `~/.claude/plugins/`, a clone under `~/.claude/skil
 bash "<skill-dir>/scripts/setup.sh" --setup "npm install" task-a task-b task-c
 ```
 This appends the gitignore lines if missing, creates `.agent-mail/` with `PROTOCOL.md` and
-`watch.sh`, **clears old inbox, reply, lock, and watcher-state files**, creates
+the helpers (`watch.sh`, `lock_run.sh`, `proc_lib.sh`, `sweep.sh`), **clears old inbox, reply, lock, and watcher-state files**, creates
 `.worktrees/<task>` on branch `<task>` from the current branch, and runs the optional setup
 command in each worktree. It prints the absolute mailbox path and each worktree path for the
 templates. Run it from the repo root on the integration branch.
@@ -202,17 +228,27 @@ are running:
 bash "<skill-dir>/scripts/setup.sh" --add --setup "npm install" task-d
 ```
 which creates only the new worktree and its empty inbox and reply files. `--force` overrides
-the refusal when you know nothing is running.
+the refusal when you know nothing is running. `setup.sh --update-helpers` replaces only the
+helper scripts (each renamed into place, safe while they run), for a mailbox created by an
+older version of the skill.
 
 ### 3. Start the watcher
 ```
-Monitor({ command: "bash .agent-mail/watch.sh", description: "agent mailbox", persistent: true, timeout_ms: 3600000 })
+Monitor({ command: "timeout 1790 bash .agent-mail/watch.sh", description: "agent mailbox", timeout_ms: 1800000 })
 ```
-Each `ISSUE`, `QUESTION`, `DONE`, `TO`, and `CLAIM` line arrives as a notification. The
-watcher saves its per-file offsets in `.agent-mail/.watch-state`, so when the Monitor expires
-(every 30 minutes) and you re-arm it, it continues from where it stopped. It used to replay
-the whole inbox on every restart, and each replay read as a flood of new events. Pass
-`--replay` only when you want the history, such as when resuming after a session restart.
+Each `ISSUE`, `QUESTION`, `DONE`, `TO`, and `CLAIM` line arrives as a notification. One
+watcher covers every inbox, including ones `setup.sh --add` creates later, so adding an agent
+never needs a re-arm. The watcher saves its per-file offsets in `.agent-mail/.watch-state`,
+so when the Monitor expires (at most 30 minutes) and you re-arm it, it continues from where it
+stopped. It used to replay the whole inbox on every restart, and each replay read as a flood
+of new events. Pass `--replay` only when you want the history, such as when resuming after a
+session restart.
+
+It cleans up after itself: it exits by itself at 29:40, the `timeout` stops it even if that
+fails, and a new watcher stops the previous one (`.agent-mail/.watch.pid`). Never hand-write a
+`tail -F inbox-*.log | grep | cut` Monitor: on Windows each re-arm left the old pipeline
+running, 113 processes by morning. Before re-arming or replacing a watcher, run
+`bash .agent-mail/sweep.sh --kill`.
 
 ### 4. Dispatch
 Do not paste the template into the prompt. The lead model's output is the most expensive
@@ -245,7 +281,7 @@ the template already says (mailbox rules, evidence rules, report format) is neve
 | `TO <other>` | Nothing, unless the target has already finished or is not running; then relay by reply file to whoever needs it. |
 | `CLAIM` | Check for a conflicting claim from another agent. If there is one, reply to the later claimant to skip and log an ISSUE. |
 | `DONE` | Progress only (one per item). Nothing to do. |
-| `DONE ALL` | The final report is about to arrive. Merge (step 6) when the agent's completion notification lands, not before: the report is what you check for evidence. |
+| `DONE ALL` | The final report is about to arrive. Merge (step 6) when the agent's completion notification lands, not before: the report is what you check for evidence. When it lands, run `bash .agent-mail/sweep.sh --kill` (a task whose last line is `DONE ALL` counts as finished) and compare what it stopped with the report's cleanup proof. |
 
 Reply file (the only file the controller writes). Numbered lines answer a status or question
 with that number; `NOTE@HH:MM:` lines are unsolicited instructions stamped with the time.
@@ -263,7 +299,7 @@ Relayed user feedback is always the user's exact words in a `(USER)` line; put y
 interpretation on a separate line if it is needed at all. Agents acted best on the quote and
 worst on paraphrases of it.
 `PAUSE` means: finish the current step, commit what is green, skip the remaining items,
-report. Use it when the plan changes under an agent or the budget is gone; it beats letting
+report. After a paused agent's report, run `sweep.sh --kill --done <task>`. Use it when the plan changes under an agent or the budget is gone; it beats letting
 the agent finish items you will throw away.
 
 Answering statuses is the controller's main job while agents run. Each one is a chance to
@@ -328,14 +364,18 @@ name. Then:
 ```bash
 bash "<skill-dir>/scripts/cleanup.sh" task-a task-b task-c
 ```
-which removes each worktree and deletes each fully-merged branch (it refuses unmerged ones).
+which first stops those tasks' leftover processes (`sweep.sh --kill --only`), then removes
+each worktree and deletes each fully-merged branch (it refuses unmerged ones). Add
+`--scratch <scratchpad>` to delete each task's scratch folder too, which also holds any
+per-agent app-data folder the brief created.
 Include `_staging` in the list. On Windows, worktree folders can stay locked for a while
 after agents finish; the script retries quietly, falls back to a plain delete, and ends with
 one summary line. Stale `.git/worktrees/<task>` records it names there are harmless once
 `git worktree list` shows only the main checkout; delete them later by hand if they bother you.
 
 ### 9. Fold in and report
-Apply any ISSUE-listed edits that were skipped because of claims, fold `docs/notes/<task>.md`
+Run `bash .agent-mail/sweep.sh` once more; with no agent running, anything it lists to stop is
+a leftover, and `--kill` takes it. Apply any ISSUE-listed edits that were skipped because of claims, fold `docs/notes/<task>.md`
 into the shared doc, and tell the user what merged, what the reviewer found, and what is still
 open.
 
@@ -370,7 +410,9 @@ commits, and mailbox lines do. On resume:
 1. `git worktree list` and `git log main..<task>` for each task: the branch shows what landed;
    the mailbox `DONE` lines say which items those commits were.
 2. Check the worktree is clean and no stray servers hold ports (`netstat -ano | grep LISTENING`).
-3. Restart the Monitor on `watch.sh --replay` to see the whole history once, read as history,
+3. Run `bash .agent-mail/sweep.sh` and read it: the agents are gone, so watcher pipelines,
+   loops, and task processes it lists are leftovers; `--kill` them. Then restart the Monitor
+   on `timeout 1790 bash .agent-mail/watch.sh --replay` to see the whole history once, read as history,
    not as new events. Without `--replay` it resumes from `.watch-state` and shows only what
    arrived after the previous watcher stopped.
 4. A stopped agent cannot be messaged back to life. Dispatch a fresh one with the same brief
@@ -427,6 +469,10 @@ the reason to run the skill at all, and they do not depend on how many agents th
   tell agents to keep their scratch folder names short.
 - OneDrive and indexers hold folders open. `cleanup.sh` expects this and retries; if a
   worktree will not go, leave it and run cleanup again later rather than fighting it.
+- Stopping a Git Bash shell (a Monitor expiring, a background task stopped) kills only that
+  shell; the rest of its pipeline and its children keep running. `watch.sh`, `lock_run.sh`
+  and `sweep.sh` are built around this (rule 15); anything else long-running needs `timeout`
+  or a tree kill (`taskkill //F //T //PID <windows pid>`).
 - The controller never `cd`s into a worktree or staging folder; a `cd` moved the session's
   working directory and every later relative path with it. `git -C <path>` and absolute paths
   throughout.
@@ -436,7 +482,8 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - [ ] Tasks partitioned (trivial for one task); every file in exactly one allowlist; shared docs assigned to one agent or routed to notes files; exclusive resources named
 - [ ] Model plan stated per task with the cheaper and stronger alternatives and their cost; user's choice recorded in each brief
 - [ ] `setup.sh` run once (reset) at round start; `--add` for any task added mid-round; worktrees exist; setup command succeeded in each
-- [ ] Monitor started on `watch.sh`, persistent; re-armed without `--replay` when it expires
+- [ ] Monitor started on `timeout 1790 bash .agent-mail/watch.sh`; `sweep.sh --kill` before each re-arm; re-armed without `--replay` when it expires
+- [ ] `sweep.sh --kill` after each `DONE ALL` report and each paused agent's report, and at wrap-up; each report's cleanup proof lists the process trees the agent stopped
 - [ ] Every implementer (one or many) dispatched in one message with a brief, a unique port, its own scratch folder, the model chosen for that task (explicit effort for Opus)
 - [ ] Every STATUS PLAN answered with ACK or a correction; every PROGRESS read, not answered; every QUESTION answered, or its default accepted consciously; every PICK shown to the user; every mandatory instruction sent as a numbered reply; every STATUS/DONE checked for the NOTEs it lists
 - [ ] Scope moves told to both agents with the file ownership; user feedback relayed as a verbatim `(USER)` quote
@@ -451,9 +498,12 @@ the reason to run the skill at all, and they do not depend on how many agents th
 
 - `templates/dispatch-brief.md` (what the controller sends), `templates/implementer.md`,
   `templates/reviewer.md`, `templates/merge-agent.md` (what the agent reads from disk)
-- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/lock_run.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
-  at run time the mailbox also holds `.watch-state`, `locks/`, and the project's own
-  `resources.conf` and `hooks/`, which never come from the skill)
-- `scripts/setup.sh` (reset, `--add`, `--force`), `scripts/cleanup.sh`
-- `tests/lock_run_test.sh` (run with `bash tests/lock_run_test.sh`; about 1-2 minutes on
-  Windows, where each process start is slow)
+- `mailbox/PROTOCOL.md`, `mailbox/watch.sh`, `mailbox/lock_run.sh`, `mailbox/proc_lib.sh`,
+  `mailbox/sweep.sh`, `mailbox/gitignore-lines.txt` (copied into the repo by `setup.sh`;
+  at run time the mailbox also holds `.watch-state`, `.watch.pid`, `locks/`, and the
+  project's own `resources.conf`, `hooks/`, and optional `sweep.keep`, which never come from
+  the skill)
+- `scripts/setup.sh` (reset, `--add`, `--force`, `--update-helpers`), `scripts/cleanup.sh`
+  (`--scratch`)
+- `tests/lock_run_test.sh` and `tests/sweep_test.sh` (run each with `bash tests/<name>.sh`;
+  about 2-3 minutes each on Windows, where each process start is slow)

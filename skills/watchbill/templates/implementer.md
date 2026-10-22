@@ -61,7 +61,9 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    correction you apply before the next commit; a `NOTE@HH:MM:` line changes your brief even
    if you never asked a question; `NOTE@HH:MM (USER): "..."` is the user's own words, act on
    the quote. `NOTE@HH:MM: PAUSE` means finish the current step, commit what is green, skip
-   every remaining item, and report.
+   every remaining item, and report. A note with the user's words or a change of plan also
+   arrives as a direct message from the controller; that message has the same authority as
+   the reply-file line, and the reply file stays the record you cite.
 2. Send `[{{TASK}}] STATUS #n PLAN: starting <item>: <approach, files, evidence you will
    collect>; applied <NOTE@... list, or "no NOTEs">`. Read the reply to it before this item's
    first commit; do not wait for it otherwise.
@@ -71,9 +73,12 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    off-by-one, a removed call), run the test against the mutation, and record that it failed.
    Restore the original and record that it passes. A reviewer has repeatedly found new tests
    that could not fail; the mutation run is how you show yours can.
-4. Run `{{TEST_CMD}}` and `{{TYPECHECK_CMD}}`. Both must be clean before every commit. Copy the
-   runner's own final summary line into your notes for the report; do not count tests by hand.
-   One report claimed 15 new tests when the runner said 13.
+4. Before every commit, run `{{TYPECHECK_CMD}}` and the tests that cover your change, all in one
+   test-runner launch (the project's affected-tests or batch helper if it has one; see "Test
+   runs" below). Run the full suite, `{{TEST_CMD}}`, once before `DONE ALL`, and again only if
+   you changed code after that run. All must be clean. Copy the runner's own final summary line
+   into your notes for the report; do not count tests by hand. One report claimed 15 new tests
+   when the runner said 13.
 5. For any behavior change, verify at runtime and collect evidence a skeptic would accept: a
    screenshot, a logged value before and after, a measured number. A passing unit test is not
    runtime evidence; agents have reported "fixed" on unit tests alone while the live behavior
@@ -98,7 +103,17 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
 Also re-read the reply file before starting any step you expect to take more than 5 minutes
 (a full suite, a build, a capture session). If ten minutes pass without you writing any line,
 send a `STATUS #n PROGRESS` saying what you are doing and what is taking the time. Silence is
-the one thing the controller cannot act on.
+the one thing the controller cannot act on; never let 30 minutes pass without a line, because
+the controller flags an inbox silent for 45 minutes.
+
+Every item has a timebox: 60 minutes of work unless the brief gives another. At the timebox send
+`STATUS #n TIMEBOX: done <what>; left <what>; estimate <minutes>`. Continue only if the
+controller replies to it or the estimate fits in 30 more minutes; otherwise commit what is
+green and move on.
+
+If you are resumed (after an app restart the controller resumes agents by id) by a message
+that does not name your task, re-orient first: read your reply file, the last 20 lines of your
+own inbox and the `TO` lines for you, then continue from your last line.
 
 ## Items marked options-first
 
@@ -115,10 +130,11 @@ while three labelled ones were chosen from in one reply.
 ## Mailbox protocol
 
 Your inbox is `{{MAIL}}/inbox-{{TASK}}.log`. It is append-only and you are its only writer.
-Append with one `printf` per line so lines land whole:
+Append with one `printf` per line so lines land whole. Every line starts with your task tag
+and then the UTC time, `[HH:MM:SSZ]`, so the controller can see when you wrote it:
 
 ```bash
-printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log"
+printf '[{{TASK}}] [%s] ISSUE: %s\n' "$(date -u +%H:%M:%SZ)" "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log"
 ```
 
 - `STATUS #n PLAN: <what you are about to do and how>; applied <NOTE list>` at task start and
@@ -154,7 +170,7 @@ printf '[{{TASK}}] ISSUE: %s\n' "what you found" >> "{{MAIL}}/inbox-{{TASK}}.log
   gives up (exit 75), send an `ISSUE`, do the rest of your work, and retry that step last.
   When a measurement is compared across runs, pin the instance with `LOCK_PREFER` and report it.
 - `DONE: <hash> <summary>; applied <NOTE list>` after each commit, and `DONE ALL: <hashes>;
-  applied <full NOTE list>` once right before your final report.
+  applied <full NOTE list>; last read NOTE@HH:MM, #n` once right before your final report.
 
 ## Other people's work
 
@@ -178,14 +194,58 @@ the report which you did.
 
 {{RUNTIME_NOTES}}
 
+## Test runs
+
+Across 200 sessions, agents re-ran the full suite 369 extra times, spent about 49 hours in
+sleep loops reading output files, and started one test process per file 740 times. A full suite
+that takes about a minute on a quiet machine takes nine with six other sessions running.
+
+- Iterate on the affected tests only, several files in one launch; never loop one process per
+  file. The full suite runs once before `DONE ALL` (see step 4). If `{{MAIL}}/PROTOCOL.md` has a
+  Testing section, its helpers and commands are the ones to use.
+- Full suites may be capped machine-wide through the lock helper. A run that prints a WAIT line
+  is queued and starts by itself; do not kill and restart it.
+- Never poll with `sleep N; cat <output>`, in a loop or turn after turn. Start a long run with
+  the shell tool's background option and wait for its completion notice, or write a done-marker
+  when it ends and wait for that once, with a timeout, in a single blocking call.
+
+## Processes you start: clean up after yourself
+
+Stop everything you started once nothing uses it; leave everything else alone. On Windows,
+stopping a shell kills only that shell: its pipeline partners and children keep running. One
+night that left 113 orphaned processes from re-armed watchers, three duplicate polling loops an
+agent had started, and test shards whose wrapper had been stopped; the churn put half the CPU
+in the kernel.
+
+- No polling loops (`until grep ...; do sleep N; done`, `while ...; sleep`). Run the long
+  command with the shell tool's background option and wait for its completion notice, or use
+  the project's done-marker waiter once. One waiter per thing: never start a second waiter for
+  something already being waited on. The only loop allowed is the bounded 8-minute wait for a
+  reply to a `QUESTION`, one per question.
+- Every background command you start, you stop or see finish before your report. Stopping a
+  wrapper (a test runner, a build script) does not stop its children: stop the whole tree. On
+  Windows: `taskkill //F //T //PID <windows pid>` (from Git Bash; `cat /proc/<pid>/winpid`
+  gives the Windows pid), or `source "{{MAIL}}/proc_lib.sh"; pl_kill_tree <pid>`. Then check
+  that no process of yours still runs from your worktree or scratch folder.
+- Commands run through `{{MAIL}}/lock_run.sh` stop their whole tree when stopped, before the lock
+  is released; still stop the helper itself rather than leaving it waiting.
+- Per-agent folders a brief asks for (an app-data or profile folder, a temporary home, a cache)
+  go inside `{{SCRATCH}}/{{TASK}}/`, so deleting that folder removes them.
+
 ## Before the final report
 
 - Remove every temporary hook, debug log, and experiment from the worktree. Run `git status`
   and `git diff {{INTEGRATION}}...HEAD --stat` and confirm nothing unintended is there.
 - Delete `{{SCRATCH}}/{{TASK}}/` and nothing else under `{{SCRATCH}}`.
-- Release any lock you still hold. Stop every server you started.
+- Release any lock you still hold. Stop every server you started, and every other process you
+  started (background runs, waiters, test shards, engines), whole trees, as in "Processes you
+  start". List what you stopped.
 - Read messages addressed to you and your reply file one last time and act on or report them.
-- Append `[{{TASK}}] DONE ALL: <hashes>; applied <full NOTE list>` to your inbox.
+- Append `[{{TASK}}] [HH:MM:SSZ] DONE ALL: <hashes>; applied <full NOTE list>; last read
+  NOTE@HH:MM, #n` to your inbox, quoting the newest NOTE and `#n` reply you have read (or
+  `none`). Read the reply file in the same shell command, just before the append; if it shows
+  something new, act on it first:
+  `cat "{{MAIL}}/{{TASK}}.reply"; grep -h "TO {{TASK}}" "{{MAIL}}"/inbox-*.log; printf '[{{TASK}}] [%s] DONE ALL: %s\n' "$(date -u +%H:%M:%SZ)" "<...>" >> "{{MAIL}}/inbox-{{TASK}}.log"`
 
 ## Final report
 
@@ -220,6 +280,8 @@ did about it>
 <every NOTE@HH:MM line received, what it asked, and the commit where you applied it; or "none">
 
 ## Cleanup proof
-<git status output; confirmation servers are stopped and locks released; `ls "{{SCRATCH}}"`
-showing your folder is gone and other agents' folders untouched>
+<git status output; confirmation servers are stopped and locks released; each background
+process tree you started and how it was stopped (or that it finished), with no process of yours
+left running from your worktree or scratch folder; `ls "{{SCRATCH}}"` showing your folder is gone
+and other agents' folders untouched>
 ```

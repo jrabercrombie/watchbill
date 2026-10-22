@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# cleanup.sh <task> [<task> ...]
+# cleanup.sh [--scratch <dir>] <task> [<task> ...]
 #
-# Removes .worktrees/<task> and deletes branch <task> if it is fully merged into the current
-# branch. An unmerged branch is kept and reported, so nothing is lost by running this early.
+# Stops the tasks' leftover processes (.agent-mail/sweep.sh --kill, limited to these tasks),
+# removes .worktrees/<task>, deletes <dir>/<task> when --scratch names the session scratch
+# folder (agent scratch and per-agent app-data folders live there), and deletes branch <task>
+# if it is fully merged into the current branch. An unmerged branch is kept and reported, so
+# nothing is lost by running this early.
 # The name "_staging" removes the staging worktree and its "integration-staging" branch.
 #
 # Windows note: a folder a sync client, indexer, or test runner just touched can be locked for a
@@ -12,7 +15,9 @@
 # print on every run, so the prune now retries quietly and the script ends with one summary
 # line saying what, if anything, is left.
 set -uo pipefail
-[ $# -ge 1 ] || { echo "usage: cleanup.sh task [task ...]" >&2; exit 2; }
+SCRATCH=""
+if [ "${1:-}" = "--scratch" ]; then SCRATCH="$2"; shift 2; fi
+[ $# -ge 1 ] || { echo "usage: cleanup.sh [--scratch DIR] task [task ...]" >&2; exit 2; }
 
 ROOT="$(git rev-parse --show-toplevel)" || exit 1
 cd "$ROOT" || exit 1
@@ -65,8 +70,18 @@ prune_records() {
   fi
 }
 
+# Processes first: a test runner or engine still running from a worktree keeps it locked.
+# The tasks named here are over, so their processes are leftovers unless a live lock holds them.
+if [ -f .agent-mail/sweep.sh ]; then
+  list="$(IFS=,; echo "$*")"
+  bash .agent-mail/sweep.sh --kill --done "$list" --only "$list" | grep -E '^(LEFTOVER|sweep: stopped)' || true
+fi
+
 status=0
 for t in "$@"; do
+  if [ -n "$SCRATCH" ] && [ -n "$t" ] && [ -d "$SCRATCH/$t" ]; then
+    rm -rf "${SCRATCH:?}/$t" && echo "removed scratch folder $SCRATCH/$t"
+  fi
   if [ -e ".worktrees/$t" ]; then
     if remove_worktree ".worktrees/$t"; then
       echo "removed worktree .worktrees/$t"

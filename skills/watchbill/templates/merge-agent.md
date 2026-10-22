@@ -78,5 +78,6 @@ Build: <command> → <result>
 ## Issues found
 
 ## Cleanup proof
-<git status; ls of the scratchpad showing your folder gone>
+<git status; ls of the scratchpad showing your folder gone; the background processes you
+started and that each was stopped (whole tree) or finished>
 ```

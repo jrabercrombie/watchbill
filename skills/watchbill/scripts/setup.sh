@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # setup.sh [--setup "<command>"] [--force] <task> [<task> ...]     reset mode: start a round
 # setup.sh --add [--setup "<command>"] <task> [<task> ...]          add mode: extend a live round
+# setup.sh --update-helpers                                          refresh the helper scripts only
 #
 # Run from anywhere inside the repo, on the integration branch.
 #
@@ -21,7 +22,14 @@
 #     truncates an existing inbox, never touches other tasks' files, and never overwrites
 #     watch.sh (a running watcher reads its script incrementally).
 #
-# Both modes print the values to paste into the dispatch brief.
+# Update mode (--update-helpers), any time, even while agents run:
+#   - replaces lock_run.sh, proc_lib.sh, sweep.sh and watch.sh in .agent-mail/ with the
+#     skill's versions, each written to a temporary file and renamed over the old one, so a
+#     copy that is running keeps reading its old bytes. Touches no inbox, reply, lock, state,
+#     worktree, or project file (PROTOCOL.md, resources.conf, hooks/), and creates no task.
+#     PROTOCOL.md is never replaced here because projects extend it; merge by hand.
+#
+# Reset and add modes print the values to paste into the dispatch brief.
 set -euo pipefail
 shopt -s nullglob
 
@@ -34,11 +42,22 @@ while [ $# -gt 0 ]; do
     --setup) SETUP_CMD="$2"; shift 2 ;;
     --add) MODE=add; shift ;;
     --force) FORCE=1; shift ;;
+    --update-helpers) MODE=update; shift ;;
     --) shift; break ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) break ;;
   esac
 done
+HELPERS="lock_run.sh proc_lib.sh sweep.sh watch.sh"
+if [ "$MODE" = update ]; then
+  ROOT="$(git rev-parse --show-toplevel)"
+  [ -d "$ROOT/.agent-mail" ] || { echo "no mailbox at $ROOT/.agent-mail; run setup.sh <tasks> first" >&2; exit 1; }
+  for h in $HELPERS; do
+    cp "$SKILL_DIR/mailbox/$h" "$ROOT/.agent-mail/.$h.new" && mv -f "$ROOT/.agent-mail/.$h.new" "$ROOT/.agent-mail/$h" && echo "updated .agent-mail/$h"
+  done
+  cmp -s "$SKILL_DIR/mailbox/PROTOCOL.md" "$ROOT/.agent-mail/PROTOCOL.md"     || echo "PROTOCOL.md differs from the skill's copy; not replaced (merge by hand if needed)"
+  exit 0
+fi
 [ $# -ge 1 ] || { echo "usage: setup.sh [--setup CMD] [--force] task [task ...]  |  setup.sh --add [--setup CMD] task [task ...]" >&2; exit 2; }
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -81,14 +100,14 @@ done < "$SKILL_DIR/mailbox/gitignore-lines.txt"
 
 mkdir -p .agent-mail
 if [ "$MODE" = reset ]; then
-  cp "$SKILL_DIR/mailbox/PROTOCOL.md" "$SKILL_DIR/mailbox/watch.sh" "$SKILL_DIR/mailbox/lock_run.sh" .agent-mail/
-  rm -f .agent-mail/inbox-*.log .agent-mail/*.reply .agent-mail/.watch-state
+  cp "$SKILL_DIR/mailbox/PROTOCOL.md" .agent-mail/
+  for h in $HELPERS; do cp "$SKILL_DIR/mailbox/$h" .agent-mail/; done
+  rm -f .agent-mail/inbox-*.log .agent-mail/*.reply .agent-mail/.watch-state .agent-mail/.watch-tick.*
   rm -rf .agent-mail/locks
   echo "mailbox reset: $ROOT/.agent-mail"
 else
   [ -e .agent-mail/PROTOCOL.md ] || cp "$SKILL_DIR/mailbox/PROTOCOL.md" .agent-mail/
-  [ -e .agent-mail/watch.sh ] || cp "$SKILL_DIR/mailbox/watch.sh" .agent-mail/
-  [ -e .agent-mail/lock_run.sh ] || cp "$SKILL_DIR/mailbox/lock_run.sh" .agent-mail/
+  for h in $HELPERS; do [ -e ".agent-mail/$h" ] || cp "$SKILL_DIR/mailbox/$h" .agent-mail/; done
   echo "mailbox kept: $ROOT/.agent-mail (add mode)"
 fi
 mkdir -p .agent-mail/locks
@@ -119,7 +138,7 @@ for t in "$@"; do
 done
 echo
 if [ "$MODE" = reset ]; then
-  echo "next: Monitor({ command: \"bash .agent-mail/watch.sh\", description: \"agent mailbox\", persistent: true })"
+  echo "next: Monitor({ command: \"timeout 1790 bash .agent-mail/watch.sh\", description: \"agent mailbox\", timeout_ms: 1800000 })"
 else
-  echo "the running watcher picks up the new inbox on its next pass; no restart needed"
+  echo "the running watcher picks up the new inbox on its next pass; no re-arm needed"
 fi

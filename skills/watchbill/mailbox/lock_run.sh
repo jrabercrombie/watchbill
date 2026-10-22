@@ -23,9 +23,19 @@
 # or stopped hook is reported on stderr and never keeps the lock held or changes the exit code.
 #
 # Guarantees: the command never runs without a lock; the helper only ever removes its own
-# lock; a lock whose owner is gone (older than LOCK_STALE_MIN minutes, default 30) is taken
-# over; it gives up with exit 75 after LOCK_WAIT_MIN minutes (default 30) of waiting.
+# lock; a lock whose owner process is gone is taken over at once (the owner file records the
+# holder's pid), and a lock with no pid in its owner file is taken over once it is older than
+# LOCK_STALE_MIN minutes (default 30); a lock whose holder is alive is never taken over. It
+# gives up with exit 75 after LOCK_WAIT_MIN minutes (default 30) of waiting.
 # Agents use this helper instead of hand-written mkdir/rm locking.
+#
+# Stopping: if the command is stopped (TERM or INT to this helper, or this helper or the
+# process that started it disappears), the command's whole process tree is stopped before the
+# lock is released, so no orphan keeps using the resource. On Windows the tree is stopped
+# with taskkill /T as well, because stopping a Git Bash shell leaves its children running.
+# Starting it detached on purpose (`lock_run.sh ... &` in a shell that then exits)? Set
+# PL_KEEP_ORPHAN=1 so the caller exiting is not taken as a stop. Needs proc_lib.sh next to it;
+# without it the command runs unguarded, as before.
 #
 # To update this file while it may be running, write the new version to a temporary file in
 # the same folder and rename it over this one. Never edit or copy over it in place: bash reads
@@ -38,6 +48,9 @@ task="$1"; resource="$2"; shift 2
 mail="$(cd "$(dirname "$0")" && pwd)"
 dir="$mail/locks"
 mkdir -p "$dir"
+have_lib=""
+# shellcheck source=proc_lib.sh
+if [ -f "$mail/proc_lib.sh" ] && . "$mail/proc_lib.sh"; then have_lib=1; fi
 
 instances=""
 if [ -f "$mail/resources.conf" ]; then
@@ -57,10 +70,18 @@ while [ -z "$lock" ]; do
   for i in $instances; do
     f="$dir/$resource.$i"
     if mkdir "$f" 2>/dev/null; then lock="$f"; chosen="$i"; break; fi
-    if [ -n "$(find "$f" -maxdepth 0 -mmin +"$stale" 2>/dev/null)" ]; then
+    # The holder's pid decides: alive means in use, gone means stale. No pid: go by age.
+    owner_state=2
+    [ -n "$have_lib" ] && { pl_owner_alive "$f/owner"; owner_state=$?; }
+    if [ "$owner_state" -eq 1 ]; then
+      echo "lock_run: taking over $resource.$i, its holder is gone (owner: $(cat "$f/owner" 2>/dev/null))" >&2
+      rm -rf "$f"
+    elif [ "$owner_state" -eq 2 ] && [ -n "$(find "$f" -maxdepth 0 -mmin +"$stale" 2>/dev/null)" ]; then
       echo "lock_run: taking over stale $resource.$i (owner: $(cat "$f/owner" 2>/dev/null))" >&2
       rm -rf "$f"
     fi
+    # Taken over: try it again now rather than after the next wait.
+    if [ ! -e "$f" ] && mkdir "$f" 2>/dev/null; then lock="$f"; chosen="$i"; break; fi
   done
   if [ -z "$lock" ]; then
     if [ "$waited" -ge "$limit" ]; then
@@ -80,7 +101,9 @@ if [ "$waited" -ge "$warn" ]; then
   printf '%s GOT %s %s.%s after %d min
 ' "$(date -u +%FT%TZ)" "$task" "$resource" "$chosen" $((waited / 60)) >> "$dir/waits.log"
 fi
-printf '%s %s\n' "$task" "$(date -u +%FT%TZ)" > "$lock/owner"
+# The holder's pid lets others (and sweep.sh) tell a live holder from a dead one.
+winpid=""; [ -r "/proc/$$/winpid" ] && read -r winpid < "/proc/$$/winpid"
+printf '%s %s pid=%s winpid=%s\n' "$task" "$(date -u +%FT%TZ)" "$$" "${winpid:-none}" > "$lock/owner"
 export LOCK_TASK="$task" LOCK_RESOURCE="$resource" LOCK_INSTANCE="$chosen"
 
 # Runs <mail>/hooks/<resource>.<kind> if it is executable, stopping it after
@@ -117,14 +140,21 @@ released=""
 release() {
   [ -z "$released" ] || return 0
   released=1
-  if [ "$(cut -d" " -f1 "$lock/owner" 2>/dev/null)" = "$task" ]; then
-    run_hook release
-    rm -rf "$lock"
-  fi
+  local line=""
+  read -r line < "$lock/owner" 2>/dev/null
+  # Only our own lock: same task and, when the owner file records one, our pid.
+  case "$line" in "$task "*) ;; *) return 0 ;; esac
+  case " $line " in *" pid="*) [[ " $line " == *" pid=$$ "* ]] || return 0 ;; esac
+  run_hook release
+  rm -rf "$lock"
 }
 trap release EXIT
 trap 'release; exit 143' TERM
 trap 'release; exit 130' INT
 echo "lock_run: $task holds $resource.$chosen" >&2
 run_hook acquire
-"$@"
+if [ -n "$have_lib" ]; then
+  pl_guarded_run release "$@"
+else
+  "$@"
+fi

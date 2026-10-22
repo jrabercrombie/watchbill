@@ -9,8 +9,11 @@ It is gitignored. Paths may contain spaces, so always quote them.
   no agent ever writes to another agent's inbox. Everyone may read every inbox.
 - `<task>.reply` — written only by the controller, append-only. Agent `<task>` reads it.
 - `locks/<resource>` — one file per exclusive resource in use (see "Exclusive resources").
-- `watch.sh` — the controller's monitor. Prints new signal lines from every inbox every 2 s
-  and remembers its place in `.watch-state`, so a restart does not replay history.
+- `watch.sh` — the controller's monitor. Prints new signal lines from every inbox every 2 s,
+  remembers its place in `.watch-state` so a restart does not replay history, exits by itself
+  just under 30 minutes, and keeps one instance per mailbox (`.watch.pid`).
+- `lock_run.sh`, `proc_lib.sh`, `sweep.sh` — the lock helper, its process-tree helpers, and the
+  leftover-process sweep (see "Cleaning up").
 
 Append with a single `printf` so a line lands whole:
 
@@ -142,7 +145,8 @@ Waits longer than `LOCK_WARN_MIN` minutes (default 5) are logged to `<mail>/lock
 ```
 
 It waits for the resource, never runs the command without the lock, releases only its own
-lock, and takes over a lock older than 30 minutes (its owner crashed). When a resource has
+lock, and takes over a lock whose recorded holder is gone (or, with no pid recorded, one older
+than 30 minutes). When a resource has
 several interchangeable instances (two build machines, two device slots), the controller lists them in
 `<mail>/resources.conf` (`<resource> = <instance> <instance>`); the helper takes whichever is
 free and passes it to the command as `$LOCK_INSTANCE`. Set `LOCK_PREFER=<instance>` when the
@@ -181,3 +185,40 @@ Say what you noticed: an `ISSUE` if it looks wrong or relevant to anyone, a `TO`
 concerns a specific agent, a `QUESTION` with a default if it changes what you should do next.
 A plan change reaches you as a reply from the controller or a `TO` line from the other agent,
 never as your own unilateral decision. No message means proceed as briefed.
+
+## Cleaning up: processes and state
+
+Clean up after yourself, as long as nothing is using the resource. On Windows (Git Bash),
+stopping a shell kills only that shell; its pipeline partners and children keep running. One
+night 113 orphaned processes from re-armed watchers, duplicate polling loops, and test shards
+whose wrapper had been stopped piled up and put half the CPU in the kernel.
+
+- **Agents** never write polling loops (`until grep ...; do sleep N; done`). Start a long command
+  with the shell tool's background option and wait for its completion notice; one waiter per
+  thing. The bounded 8-minute wait for a reply to a `QUESTION` is the one exception. Before the
+  final report, stop every process tree you started (on Windows `taskkill //F //T //PID
+  <windows pid>`, or `source <mail>/proc_lib.sh; pl_kill_tree <pid>`) and list it in the cleanup
+  proof. Per-agent folders (app data, profiles, caches) live inside your scratch folder.
+- **Exclusive resources**: `lock_run.sh` records the holder's pid in the owner file. A lock
+  whose holder is gone is taken over at once; a lock whose holder is alive is never taken over.
+  If the command is stopped, its whole tree is stopped before the lock is released, so no
+  orphan keeps using the resource.
+- **`sweep.sh`** (dry run by default, `--kill` to act) lists and stops what this mailbox left
+  behind and nothing else: watcher pipelines whose shell is gone, polling loops whose shell is
+  gone or whose task is finished, and processes started from the worktree of a finished task.
+  Live lock holders, the current watcher, and live tasks are spared. It also removes lock
+  folders whose holder is gone and stale watcher pid and tick files. `--done <tasks>` marks
+  tasks finished; `--keep <task|pid>` or a line in `sweep.keep` marks something in use (a build
+  someone is trying out from a worktree).
+
+| What | Cleaned by | When |
+|------|-----------|------|
+| Processes an agent started | the agent | before its final report (listed in the cleanup proof) |
+| A stopped locked command's tree | `lock_run.sh` | when it is stopped, before the lock is released |
+| Lock folders whose holder is gone | `lock_run.sh`, `sweep.sh --kill` | at the next acquire; at each sweep |
+| Watcher processes | `watch.sh` itself | it exits after 29:40, runs under `timeout`, and replaces an older watcher |
+| Leftover watchers, loops, task processes | `sweep.sh --kill` (controller) | before re-arming a watcher, after `DONE ALL` or `PAUSE`, at wrap-up |
+| Stale `.watch.pid`, `.watch-tick.*` | `watch.sh` on exit, `sweep.sh --kill` | on exit; at each sweep |
+| `.watch-state` lines for deleted inboxes | `watch.sh` | each time it saves state |
+| An agent's scratch folder (and app data in it) | the agent; `cleanup.sh --scratch` | final report; task cleanup |
+| Worktrees, merged branches, task processes | `cleanup.sh` (runs `sweep.sh --kill --only`) | once follow-ups are decided |

@@ -81,7 +81,9 @@ update yourself through the browser tools, and say which you did.
 ## Before the final report
 
 Delete `{{SCRATCH}}/review-{{BATCH}}/` and nothing else under `{{SCRATCH}}`; release any lock;
-stop your server. Confirm with `git -C "{{REPO_ROOT}}" status` that the repository is exactly
+stop your server and every background process you started, whole trees (on Windows stopping a
+shell leaves its children running; `taskkill //F //T //PID <windows pid>`); no polling loops,
+wait for completion notices instead. Confirm with `git -C "{{REPO_ROOT}}" status` that the repository is exactly
 as you found it.
 
 ## Final report
@@ -112,5 +114,6 @@ Fix: <exact change to make>
 <anything else noticed, in or out of scope>
 
 ## Cleanup proof
-<git status of the repo; ls of the scratchpad showing your folder gone>
+<git status of the repo; ls of the scratchpad showing your folder gone; the background
+processes you started and that each was stopped or finished>
 ```
