@@ -139,7 +139,7 @@ hand ran their command after a failed acquire, removed another agent's lock, or 
 behind; each time a capture or measurement was silently spoiled.
 
 ```bash
-bash <mail>/lock_run.sh <task> <resource> <command...>
+bash <mail>/lock_run.sh [--max SECONDS] <task> <resource> <command...>
 
 Waits longer than `LOCK_WARN_MIN` minutes (default 5) are logged to `<mail>/locks/waits.log` (WAIT while waiting, GOT when taken, GAVE-UP at the limit). The controller watches that file alongside the inboxes and acts on excessive waiting (fewer parallel users of the resource, or more instances).
 ```
@@ -168,6 +168,20 @@ A hook is stopped after `LOCK_HOOK_TIMEOUT` seconds (default 60). A failing or s
 reported on stderr and never keeps the lock held or changes the command's exit code. Hooks
 belong to the project, not to this protocol; agents never write or edit them unless their
 brief says so.
+
+**Maximum hold.** A command may hold a lock for at most `LOCK_MAX` seconds (default 1800;
+`--max SECONDS` or `LOCK_MAX=<seconds>` per call; 0 = no limit; waiting does not count). Past it
+the helper stops the command's whole tree, runs the release hook, frees the lock, exits 124, and
+appends `[<task>] [HH:MM:SSZ] ISSUE: <task> <resource> held past N s; command stopped` to
+`<mail>/inbox-<task>.log`. A run that legitimately needs longer passes a bigger limit
+explicitly, sized to the work. While holding a lock, post a `STATUS PROGRESS` line at least every
+20 minutes. A tool's own timeout is not a substitute: one such timeout counted sleeps instead of
+elapsed time and let a run hold a device for 46 minutes.
+
+**Controller duty.** On each watcher re-arm, list the lock folders (`ls -l --time-style=full-iso
+<mail>/locks`) and read each owner file: a lock held longer than the maximum, or longer than 20
+minutes with no PROGRESS line from its holder, is flagged to the user and the holder is asked
+(or told) to stop it with `kill -TERM`.
 
 **Stopping a locked run early.** Send `kill -TERM <lock_run pid>` from bash: its trap stops the
 command's whole tree, runs the release hook, and frees the lock. **Never hard-kill it**

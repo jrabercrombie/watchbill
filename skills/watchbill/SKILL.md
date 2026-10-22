@@ -15,6 +15,16 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-22, hung runs**: two locked runs hung (a device-bound run for 46 minutes, whose own
+  timeout never fired, and a GPU-bound capture for over an hour, in a visible window) and nobody
+  noticed until the user did. `lock_run.sh` now has a maximum hold time: `LOCK_MAX` seconds,
+  default 1800, or `--max SECONDS` per call (0 = no limit). Past it the command's whole tree is
+  stopped, the release hook runs, the lock is freed, the helper exits 124, and
+  `ISSUE: <task> <resource> held past N s; command stopped` is appended to the task's inbox, where
+  the watcher sees it. Agents with a legitimately longer run pass a bigger limit explicitly and
+  post a PROGRESS line at least every 20 minutes while holding a lock; the controller checks lock
+  ages on each watcher re-arm and flags old holds with no progress. Tests 16 to 16c in
+  `tests/lock_run_test.sh` fail without the feature.
 - **2026-10-22, later**: an agent hard-killed a locked run on an exclusive device. The lock freed
   (the trap never ran, the next waiter saw a dead holder), but the command's Git Bash children
   are not in the Windows process tree, survived, and kept using the device for about 2.5 minutes
@@ -242,7 +252,8 @@ The template on disk is the contract; the brief only supplies the values.
     `until grep ...; sleep` loops, and stopped test wrappers left their shards; 113 orphans
     (about 583 MB) and the process churn put half the CPU in the kernel. So watchers time out
     by themselves, agents write no polling loops and stop every tree they start,
-    `lock_run.sh` stops a stopped command's tree before releasing, and `sweep.sh` stops what is
+    `lock_run.sh` stops a stopped command's tree before releasing (and stops a command that holds
+    its lock longer than the maximum hold, 30 minutes unless the call asks for more), and `sweep.sh` stops what is
     left, never anything a live lock, a live task, or the current watcher is using. None of
     this depends on the platform changing how it stops processes. What is cleaned, by whom,
     and when is tabled in PROTOCOL.md, "Cleaning up".

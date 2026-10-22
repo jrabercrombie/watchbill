@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # Run one command while holding a lock on an exclusive resource, then release it.
 #
-#   bash <mail>/lock_run.sh <task> <resource> <command...>
+#   bash <mail>/lock_run.sh [--max SECONDS] <task> <resource> <command...>
+#
+# Maximum hold: a command may hold the lock for at most LOCK_MAX seconds (default 1800; set it
+# per call with LOCK_MAX=<seconds> or --max <seconds>; 0 means no limit). Waiting for the lock
+# does not count. Past the limit the command's whole tree is stopped, the release hook runs, the
+# lock is freed, the helper exits 124, and `[<task>] [HH:MM:SSZ] ISSUE: <task> <resource> held
+# past N s; command stopped` is appended to <mail>/inbox-<task>.log, where the controller's
+# watcher sees it. A run that legitimately needs longer passes a bigger limit explicitly.
 #
 # A resource may have several interchangeable instances (two build machines, three device
 # slots, two test databases). Declare them in <mail>/resources.conf, one resource per line:
@@ -48,8 +55,13 @@
 # the same folder and rename it over this one. Never edit or copy over it in place: bash reads
 # a script as it runs, so a running copy would continue with the new file's bytes.
 set -u
+max_hold="${LOCK_MAX:-1800}"
+if [ "${1:-}" = "--max" ]; then
+  [ "$#" -ge 2 ] && max_hold="$2" && shift 2 || { echo "usage: lock_run.sh [--max SECONDS] <task> <resource> <command...>" >&2; exit 64; }
+fi
+case "$max_hold" in ''|*[!0-9]*) echo "lock_run: the maximum hold must be a number of seconds, not '$max_hold'" >&2; exit 64 ;; esac
 if [ "$#" -lt 3 ]; then
-  echo "usage: lock_run.sh <task> <resource> <command...>" >&2; exit 64
+  echo "usage: lock_run.sh [--max SECONDS] <task> <resource> <command...>" >&2; exit 64
 fi
 task="$1"; resource="$2"; shift 2
 mail="$(cd "$(dirname "$0")" && pwd)"
@@ -146,10 +158,13 @@ run_hook() {
   return 0
 }
 
-released=""
+released=""; maxed=""; max_watch=""
 release() {
   [ -z "$released" ] || return 0
   released=1
+  [ -n "$max_watch" ] && kill "$max_watch" 2>/dev/null
+  # The watchdog's subshell flags an overrun in a file; this shell reads it.
+  [ -e "$lock/maxed" ] && maxed=1
   local line=""
   read -r line < "$lock/owner" 2>/dev/null
   # Only our own lock: same task and, when the owner file records one, our pid.
@@ -160,12 +175,31 @@ release() {
   [ -n "$have_lib" ] && pl_kill_recorded "$lock/tree"
   run_hook release
   rm -rf "$lock"
+  if [ -n "$maxed" ]; then
+    printf '[%s] [%s] ISSUE: %s %s held past %s s; command stopped
+' "$task" "$(date -u +%H:%M:%SZ)" "$task" "$resource" "$max_hold" >> "$mail/inbox-$task.log"
+  fi
 }
-trap release EXIT
+# The exit code of a run stopped at its maximum hold is 124, as with timeout(1).
+trap 'release; [ -n "$maxed" ] && exit 124' EXIT
 trap 'release; exit 143' TERM
 trap 'release; exit 130' INT
 echo "lock_run: $task holds $resource.$chosen" >&2
 run_hook acquire
+if [ "$max_hold" -gt 0 ]; then
+  # The watchdog sleeps in short steps (so it ends soon after the helper does), then flags the
+  # overrun and sends this helper TERM: its trap stops the command's tree and releases the lock.
+  main=$$
+  ( exec </dev/null >/dev/null 2>&1
+    SECONDS=0
+    until [ "$SECONDS" -ge "$max_hold" ]; do
+      kill -0 "$main" 2>/dev/null || exit 0
+      sleep 2
+    done
+    echo maxed > "$lock/maxed"
+    kill -TERM "$main" ) &
+  max_watch=$!
+fi
 if [ -n "$have_lib" ]; then
   export PL_TREE_FILE="$lock/tree"
   pl_guarded_run release "$@"

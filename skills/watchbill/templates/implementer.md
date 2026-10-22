@@ -226,6 +226,12 @@ in the kernel.
   Windows: `taskkill //F //T //PID <windows pid>` (from Git Bash; `cat /proc/<pid>/winpid`
   gives the Windows pid), or `source "{{MAIL}}/proc_lib.sh"; pl_kill_tree <pid>`. Then check
   that no process of yours still runs from your worktree or scratch folder.
+- A locked command is stopped by `lock_run.sh` after its maximum hold (1800 s by default; the
+  helper then appends an `ISSUE` line to your inbox and exits 124). A run you know will take longer
+  passes a bigger limit explicitly (`bash {{MAIL}}/lock_run.sh --max 3600 <task> <resource> ...`),
+  sized to the work. While you hold a lock, send a `STATUS PROGRESS` line at least every 20
+  minutes; a run that shows no progress is a hang, so stop it (`kill -TERM`), report it, and do not
+  wait for the limit.
 - Commands run through `{{MAIL}}/lock_run.sh` stop their whole tree when stopped, before the lock
   is released; still stop the helper itself rather than leaving it waiting. To stop a locked
   run early, `kill -TERM <lock_run pid>` from bash (its trap stops the tree and frees the
