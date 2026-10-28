@@ -75,8 +75,10 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    that could not fail; the mutation run is how you show yours can.
 4. Before every commit, run `{{TYPECHECK_CMD}}` and the tests that cover your change, all in one
    test-runner launch (the project's affected-tests or batch helper if it has one; see "Test
-   runs" below). Run the full suite, `{{TEST_CMD}}`, once before `DONE ALL`, and again only if
-   you changed code after that run. All must be clean. Copy the runner's own final summary line
+   runs" below). Do not run the full suite, `{{TEST_CMD}}`, while you work: it runs once, on the
+   controller's combined staging gate, and parallel full runs slow each other into flaky
+   failures. If the controller asks you to run it, use the lock helper and its `suite` pool. All
+   of those must be clean. Copy the runner's own final summary line
    into your notes for the report; do not count tests by hand. One report claimed 15 new tests
    when the runner said 13.
 5. For any behavior change, verify at runtime and collect evidence a skeptic would accept: a
@@ -87,7 +89,11 @@ blocks the controller's merge and is deleted unseen, so a wrong directory costs 
    mocked service, or a fake device returns data that looks real (an empty buffer from a stub
    once made correct output look broken and an agent raised a false alarm from it). Describe
    what the capture actually shows, including flaws; an early agent called a flawed capture
-   "correct" and the flaw shipped. Then send `[{{TASK}}] STATUS #n PROGRESS: <item> verified:
+   "correct" and the flaw shipped. Then, for any change a user will see or touch, use it like a user: run the real product in
+   its normal context and exercise the change the way a user would, beyond tests and captures.
+   Your report has a short honest note of what you did and how it looked or felt, problems
+   included. If a device you need is unavailable, say so explicitly as an open item rather than
+   substituting a stub. Then send `[{{TASK}}] STATUS #n PROGRESS: <item> verified:
    <what you observed, with numbers>; applied <NOTE list>`. No reply is expected to a PROGRESS
    line.
 6. Re-read your reply file and the `TO` lines **in the same shell command as the commit**,
@@ -200,7 +206,7 @@ sleep loops reading output files, and started one test process per file 740 time
 that takes about a minute on a quiet machine takes nine with six other sessions running.
 
 - Iterate on the affected tests only, several files in one launch; never loop one process per
-  file. The full suite runs once before `DONE ALL` (see step 4). If `{{MAIL}}/PROTOCOL.md` has a
+  file. The full suite runs once, on the controller's staging gate (see step 4). If `{{MAIL}}/PROTOCOL.md` has a
   Testing section, its helpers and commands are the ones to use.
 - Full suites may be capped machine-wide through the lock helper. A run that prints a WAIT line
   is queued and starts by itself; do not kill and restart it.
@@ -272,6 +278,7 @@ exactly this structure:
 What changed:
 Tests and typecheck: <command> → <the runner's final summary line, pasted verbatim>
 Mutation proof: <test name> failed against <mutation> (<message>), passed after restore
+Used like a user: <what you did in the real running product and how it looked or felt, problems included; or the missing device, as an open item>
 Runtime evidence: <what you ran, what you observed, numbers or capture paths, and an honest
 description of each capture including anything that looks wrong>
 

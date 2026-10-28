@@ -149,7 +149,11 @@ lock, and takes over a lock whose recorded holder is gone (or, with no pid recor
 than 30 minutes). When a resource has
 several interchangeable instances (two build machines, two device slots), the controller lists them in
 `<mail>/resources.conf` (`<resource> = <instance> <instance>`); the helper takes whichever is
-free and passes it to the command as `$LOCK_INSTANCE`. Set `LOCK_PREFER=<instance>` when the
+free and passes it to the command as `$LOCK_INSTANCE`. A line `<resource> max=<seconds>` in the
+same file sets that resource's default maximum hold (for example `suite max=5400` for a full test
+suite); `--max` and `LOCK_MAX` override it, and a long measured run sets its own `--max`, sized to
+the run, when it takes the lock. Expensive whole-project checks (the full test suite) go through
+one resource, `suite`, with one slot by default, so only one runs on the machine at a time. Set `LOCK_PREFER=<instance>` when the
 work needs one particular instance, for example two measurements that must be compared on the
 same hardware, and say in your report which instance produced each number.
 

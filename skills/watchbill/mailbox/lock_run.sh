@@ -8,7 +8,13 @@
 # does not count. Past the limit the command's whole tree is stopped, the release hook runs, the
 # lock is freed, the helper exits 124, and `[<task>] [HH:MM:SSZ] ISSUE: <task> <resource> held
 # past N s; command stopped` is appended to <mail>/inbox-<task>.log, where the controller's
-# watcher sees it. A run that legitimately needs longer passes a bigger limit explicitly.
+# watcher sees it. A run that legitimately needs longer passes a bigger limit explicitly, sized
+# to the run, when it takes the lock. A resource whose runs are usually long (a full test suite,
+# a long measurement) can carry its own default in <mail>/resources.conf, on a line of its own:
+#
+#   <resource> max=<seconds>                      e.g.   suite max=5400
+#
+# Order of precedence: --max, then LOCK_MAX, then the resource's max= line, then 1800.
 #
 # A resource may have several interchangeable instances (two build machines, three device
 # slots, two test databases). Declare them in <mail>/resources.conf, one resource per line:
@@ -55,11 +61,11 @@
 # the same folder and rename it over this one. Never edit or copy over it in place: bash reads
 # a script as it runs, so a running copy would continue with the new file's bytes.
 set -u
-max_hold="${LOCK_MAX:-1800}"
+max_hold="${LOCK_MAX:-}"
 if [ "${1:-}" = "--max" ]; then
   [ "$#" -ge 2 ] && max_hold="$2" && shift 2 || { echo "usage: lock_run.sh [--max SECONDS] <task> <resource> <command...>" >&2; exit 64; }
 fi
-case "$max_hold" in ''|*[!0-9]*) echo "lock_run: the maximum hold must be a number of seconds, not '$max_hold'" >&2; exit 64 ;; esac
+case "$max_hold" in *[!0-9]*) echo "lock_run: the maximum hold must be a number of seconds, not '$max_hold'" >&2; exit 64 ;; esac
 if [ "$#" -lt 3 ]; then
   echo "usage: lock_run.sh [--max SECONDS] <task> <resource> <command...>" >&2; exit 64
 fi
@@ -72,6 +78,10 @@ have_lib=""
 if [ -f "$mail/proc_lib.sh" ] && . "$mail/proc_lib.sh"; then have_lib=1; fi
 
 instances=""
+if [ -z "$max_hold" ] && [ -f "$mail/resources.conf" ]; then
+  max_hold="$(sed -n "s/^[[:space:]]*$resource[[:space:]][[:space:]]*max=\([0-9][0-9]*\)[[:space:]]*\$/\1/p" "$mail/resources.conf" | head -n1)"
+fi
+[ -n "$max_hold" ] || max_hold=1800
 if [ -f "$mail/resources.conf" ]; then
   instances="$(sed -n "s/^[[:space:]]*$resource[[:space:]]*=[[:space:]]*//p" "$mail/resources.conf" | head -n1)"
 fi

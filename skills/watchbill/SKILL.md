@@ -15,8 +15,37 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-28, later**: eleven additions from the same runs. (e) **Use it like a user**: for any
+  change a user will see or touch, the implementer exercises it in the real running product, in
+  its normal context, beyond tests and captures, and reports a short honest note of what it did
+  and how it looked or felt, problems included; a missing device is an explicit open item; the
+  controller does the same before telling the user something is ready. (f) **One whole-project
+  check at a time**: full suites are serialized machine-wide (the suite pool has one slot by
+  default), agents run only the tests their change affects, and the full suite runs once, on the
+  combined staging gate; parallel full runs slowed each other and caused load-only flaky
+  failures. (g) The controller relays every meaningful update to the user as it arrives (plans,
+  findings, problems, results, decisions needed, device state), skipping only pure heartbeats
+  and exact repeats; a needed decision goes to the user at once; a relay layer such as a page
+  keeper batches lines that arrive close together into one write and skips heartbeats. Savings
+  come from efficiency, never from telling the user less. User messages always come first. (h) Relay layers (the controller, a page
+  keeper) restate only what the source said, quote the user verbatim, and mark their own
+  inferences. (i) Allowlists are a collision guardrail, not how work is divided; tasks are
+  features or fixes and the allowlist is broad enough not to force a cramped solution. (j) The
+  skill says "development work" throughout, since agents also make assets and other content.
+  (k) An agent that dies mid-task (an API or authentication error) is resumed with a message
+  naming what survived (scratch files, commits, locks) after its locks are checked and cleared;
+  it is not restarted from zero.
+- **2026-10-28, lessons from long runs**: (1) a full test suite or long measurement run under a
+  lock exceeded the default 30-minute maximum hold, so `resources.conf` now takes a per-resource
+  default on a line of its own (`suite max=5400`), used by `lock_run.sh` when neither `--max` nor
+  `LOCK_MAX` is given (test 16d fails without it); a long run still sets its own `--max`, sized to
+  the run, when it takes the lock. (2) Agents reported `no NOTEs` while a NOTE sat in their reply
+  file, so a mandatory instruction now goes both to the reply file and as a direct message to the
+  agent. (3) Exclusive devices and measurements: check the device's state at the start of each
+  run (awake and unlocked, power state if it affects the measurement, thermal state with
+  cool-down gates); see the runtime notes.
 - **2026-10-22, hung runs**: two locked runs hung (a device-bound run for 46 minutes, whose own
-  timeout never fired, and a GPU-bound capture for over an hour, in a visible window) and nobody
+  timeout never fired, and a capture bound to a shared accelerator for over an hour, in a visible window) and nobody
   noticed until the user did. `lock_run.sh` now has a maximum hold time: `LOCK_MAX` seconds,
   default 1800, or `--max SECONDS` per call (0 = no limit). Past it the command's whole tree is
   stopped, the release hook runs, the lock is freed, the helper exits 124, and
@@ -87,11 +116,13 @@ that project's `.agent-mail/`, never in the skill.
   `setup.sh --add` and live-mailbox refusal; watcher offsets in `.watch-state` with `--replay`;
   lock files for exclusive resources; `NOTE@HH:MM`, applied-NOTE suffixes, and `PAUSE`;
   scope-change broadcast; staging merges; windowed-capture evidence, verbatim test counts,
-  mutation proof; Windows and OneDrive hazards; the controller never `cd`s.
+  mutation proof; Windows and cloud-sync hazards; the controller never `cd`s.
 - **2026-09-10 to 09-13**: first version. Worktrees, allowlists, file mailbox with acknowledged
   statuses, claims as notices, independent reviewer, templates read from disk, single-task use.
 
 ## When to use
+
+This skill coordinates development work of every kind: code, and also assets and other content the agents make.
 
 - Any implementer dispatch in a git repo, including a single task. The value is the mailbox (a
   `STATUS` before each item that the controller acknowledges or corrects before the first
@@ -176,7 +207,9 @@ The template on disk is the contract; the brief only supplies the values.
    changes, and half-finished edits hot-reloaded into a running app.
 2. **Unique dev-server port per agent, and never stop a server you did not start.** An agent
    once killed another agent's server because it looked stray.
-3. **File allowlists.** Every prompt names the files the agent may edit. Anything else needs a
+3. **File allowlists.** Every prompt names the files the agent may edit. The allowlist is a
+   collision guardrail, not how the work is divided: tasks are features or fixes, and the list
+   is broad enough that it never forces a cramped solution. Anything else needs a
    `CLAIM` line first. Never modify source materials or user-owned assets; fix alignment or
    behavior through code, config, or data.
 4. **Evidence, not claims.** Tests and typecheck clean before every commit; a runtime check
@@ -187,7 +220,11 @@ The template on disk is the contract; the brief only supplies the values.
    are the runner's final line pasted verbatim (a report said 15 new tests, the runner said
    13); every new test comes with a mutation proof, shown failing against a deliberate break
    of the code it guards (the reviewer kept finding tests that could not fail); and any claim
-   about what a user sees or gets needs a capture from the real environment that the agent
+   about what a user sees or gets needs a capture from the real environment, and, beyond
+   captures and tests, the implementer uses the change like a user would in the real running
+   product, in its normal context, and reports honestly what it did and how it looked or felt
+   (a device it lacked is stated as an open item); the controller does the same before telling
+   the user something is ready. The capture rule in full: it comes from the real environment that the agent
    opened and described honestly, because an environment with stubbed services (a display-less environment, a mocked
    API, a fake device) returns data that looks real and has produced both a false alarm and a
    flawed capture called "correct".
@@ -232,10 +269,14 @@ The template on disk is the contract; the brief only supplies the values.
     When one holder can leave the resource in a changed state (a process still running, a
     setting changed), the controller adds a project-side `.agent-mail/hooks/<resource>.release`
     (and optionally `.acquire`) that returns it to a known state; see PROTOCOL.md.
+    A resource whose runs are long (a full suite, a long measurement) gets its own default
+    maximum hold with a `<resource> max=<seconds>` line in `resources.conf`, and a long
+    measured run passes `--max` sized to the run when it takes the lock.
 12. **Instructions must be seen before they matter.** Agents read the reply file in the same
     shell command as every commit and before any step longer than five minutes; every
     `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
-    numbered reply to the agent's latest status, never as a bare NOTE; `NOTE@HH:MM: PAUSE`
+    numbered reply to the agent's latest status, never as a bare NOTE, and also sent as a direct
+    message so a missed file read cannot hide it; `NOTE@HH:MM: PAUSE`
     means finish the step, commit green work, skip the rest, report. Agents have committed
     seconds after a scope change landed because their last read was at the start of the item.
 13. **Merge through a staging branch.** Two branches that each passed alone once produced a
@@ -383,7 +424,10 @@ bare NOTE.** A NOTE can land between checkpoints and be missed; a numbered reply
 against a status the agent is waiting to hear about. Then check the next `STATUS` or `DONE`:
 each one ends with the NOTEs applied (`applied NOTE@14:02` or `no NOTEs`), so a missing entry
 means the instruction did not land, and you repeat it as a numbered reply. Agents have
-committed with the old scope because a NOTE arrived after their last read.
+committed with the old scope because a NOTE arrived after their last read. Agents have also
+reported `no NOTEs` while a NOTE sat in their reply file. So **every mandatory instruction goes
+to both places: the reply file and a direct message to the agent**, and the next status must
+still quote it as applied.
 
 **Scope changes are broadcast.** When you move an item, or a file, from agent A to agent B,
 tell both, in numbered replies, with the exact file ownership after the change:
@@ -430,7 +474,12 @@ each FAIL, repeats at least one mutation proof per item, and pastes the runner's
 ### 8. Fix, re-merge, clean up
 Dispatch fixes to the original task's worktree (same implementer template, same task name,
 same inbox and reply files, items = the FAIL list for that task, branch already exists).
-Merge on `DONE`, run the suite again. Do not clean up until the review is in and the follow-up
+Merge on `DONE`, run the suite again. The full suite runs once, here, on the combined staging
+gate, and one whole-project check at a time: the `suite` pool has one slot by default (a resource
+not listed in `resources.conf` has a single instance; add a `suite max=<seconds>` line for the
+maximum hold), and
+the controller runs it through `lock_run.sh`. Agents ran full suites in parallel and slowed each
+other into load-only flaky failures. Do not clean up until the review is in and the follow-up
 list for each task is decided: twice a worktree was removed and the same agent then needed
 more work, which forced a new task name and fresh mailbox files. Follow-ups reuse the task
 name. Then:
@@ -465,6 +514,14 @@ failed**. Every such message has:
   dispatch, or the decision waiting on the user.
 - **For a spot check**: whether that agent's claims held up, and which ones were re-verified.
 
+Relay every meaningful update to the user as it arrives: plans, findings, problems, results,
+decisions needed, device state. Skip only pure heartbeats and exact repeats. Anything needing a
+user decision goes to the user at once. A relay layer such as a page keeper batches lines that
+arrive close together into one write and skips heartbeats; the savings come from efficiency,
+never from telling the user less. User messages always come first. **Relays are faithful**: the controller (and a
+page keeper) restates only what the source said, quotes the user verbatim, and marks anything
+it inferred as its own inference.
+
 No silent finishes: an agent that completes and merges without a word to the user leaves them
 guessing whether anything happened. A failure is reported as a failure, in those words, not as
 "mostly done" or buried in a list of merges. If a page keeper runs, the same message also goes
@@ -486,13 +543,16 @@ Keep it minimal: one line per entry, newest last, under a date heading.
 
 Write every entry as a plain description a reader can understand months later without the
 conversation. Never refer to a choice by its label from an options round ("option B", "variant
-2", "N1"): write what was chosen ("soft shadow edges", not "B"). Quote the user briefly when the
+2", "N1"): write what was chosen ("rounded corners", not "B"). Quote the user briefly when the
 wording matters. Point at commits, files, and captures instead of repeating their content.
 Add a `Decided:` line when the user decides and a `Done:` line after each dispatch and merge, and
 commit the log with the merge or on its own. Do not log agent-internal steps, statuses, or
 reviewer findings; the mailbox and reports hold those.
 
 ## Page keeper (optional)
+
+(A page keeper is a relay layer: it records only what the source said, quotes the user
+verbatim, and marks its own inferences as such.)
 
 Some users want a page (for example a hosted status board with a small database) that shows
 what each agent is doing, highlights with real times, and the decisions waiting on them, with
@@ -546,9 +606,13 @@ commits, and mailbox lines do. On resume:
    on `timeout 1790 bash .agent-mail/watch.sh --replay` to see the whole history once, read as history,
    not as new events. Without `--replay` it resumes from `.watch-state` and shows only what
    arrived after the previous watcher stopped.
-4. A stopped agent cannot be messaged back to life. Dispatch a fresh one with the same brief
-   plus a paragraph naming the commits already on the branch and the item to start from, and
-   tell it to number its statuses after the last one in the inbox.
+4. A stopped agent cannot be messaged back to life after a session restart. Dispatch a fresh one
+   with the same brief plus a paragraph naming the commits already on the branch and the item
+   to start from, and tell it to number its statuses after the last one in the inbox.
+   An agent that died mid-task on its own (an API or authentication error) is resumed, not
+   restarted from zero: check for and clear its locks first (`ls .agent-mail/locks`, stale or
+   dead-holder ones), then resume it with a message naming what survived: its scratch files,
+   its commits on the branch, and any locks it still held.
 5. If a page keeper was running, resume it with its handbook (it does not survive a restart
    either) before anything else writes to the page.
 6. Merge finished branches as usual; a branch whose agent died mid-item is still safe to merge
@@ -568,6 +632,15 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - Anything driven by real time (timers, schedulers, animations, simulations) needs real time
   to pass. An agent that fast-forwards steps in a loop to speed up a check sees everything
   freeze and reports a false failure. Checks need real delays between steps.
+- An exclusive device, or any measurement taken on shared hardware, is checked at the start of
+  every run, not assumed: is it awake and unlocked, is its power state the one the measurement
+  needs (for example running on its own power or on external power), and what is its thermal
+  state. Record these with the result. Gate a measurement on a cool-down: wait until the
+  temperature is below a stated threshold before starting, and say which threshold in the
+  report. Runs compared with each other should be interleaved, so drift in temperature or
+  background load affects them equally.
+- A long run sets its own maximum hold when it takes the lock, sized to the run with some
+  margin, rather than relying on the default.
 - Tell the agent how to start the app on its port and which existing preview config, if any,
   it must not reuse.
 - Browser automation tools (the Claude browser pane) are one shared pane for every agent in
@@ -591,16 +664,16 @@ the reason to run the skill at all, and they do not depend on how many agents th
 - Ask for the runner's final line, not a count. Reports have said "15 new tests" when the
   runner said 13; the pasted line settles it.
 
-## Windows and OneDrive hazards (put the relevant ones in `{{RUNTIME_NOTES}}`)
+## Windows and cloud-sync hazards (put the relevant ones in `{{RUNTIME_NOTES}}`)
 
 - `git stash` is shared across every worktree of a repository, so an agent's stash surfaces in
-  another agent's checkout, and OneDrive has blocked `git stash -u` outright. Agents park work
+  another agent's checkout, and a cloud-synced folder has blocked `git stash -u` outright. Agents park work
   as a WIP commit instead; the templates say so.
 - Python on Windows writes CRLF and the system code page by default and once broke a script
   file with cp1252 characters. Files are written as UTF-8 with LF; the templates say so.
 - Long paths break temp worktrees and clones. Keep the scratchpad path short if you can, and
   tell agents to keep their scratch folder names short.
-- OneDrive and indexers hold folders open. `cleanup.sh` expects this and retries; if a
+- Cloud-sync clients and indexers hold folders open. `cleanup.sh` expects this and retries; if a
   worktree will not go, leave it and run cleanup again later rather than fighting it.
 - Stopping a Git Bash shell (a Monitor expiring, a background task stopped) kills only that
   shell; the rest of its pipeline and its children keep running. `watch.sh`, `lock_run.sh`

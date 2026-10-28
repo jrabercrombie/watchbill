@@ -254,5 +254,19 @@ check "max hold: --max stops a long command (took ${took}s, rc $rc)" '[ $rc -eq 
 check "max hold: --max ISSUE names 2 s" 'grep -q "ISSUE: t16c res held past 2 s" "$M/inbox-t16c.log"'
 rm -rf "$M"
 
+# 16d. A per-resource default max hold in resources.conf applies when LOCK_MAX/--max are unset;
+# --max still overrides it.
+fresh
+printf 'res max=2
+' > "$M/resources.conf"
+t0=$SECONDS
+bash "$M/lock_run.sh" t16d res sleep 60 2>"$M/stderr"; rc=$?
+took=$((SECONDS - t0))
+check "max hold: resources.conf default stops a long command (took ${took}s, rc $rc)" '[ $rc -eq 124 ] && [ $took -le 20 ]'
+check "max hold: resources.conf default ISSUE names 2 s" 'grep -q "ISSUE: t16d res held past 2 s" "$M/inbox-t16d.log"'
+out="$(run --max 100 t16e res echo fine)"; rc=$?
+check "max hold: --max overrides resources.conf" '[ "$out" = fine ] && [ $rc -eq 0 ] && [ ! -e "$M/inbox-t16e.log" ]'
+rm -rf "$M"
+
 echo "lock_run tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
