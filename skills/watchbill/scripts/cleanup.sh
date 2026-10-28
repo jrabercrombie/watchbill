@@ -11,7 +11,7 @@
 # Windows note: a folder a sync client, indexer, or test runner just touched can be locked for a
 # few seconds. If git cannot remove the worktree, this waits, retries, and finally falls back
 # to deleting the folder and pruning git's registration. Pruning the .git/worktrees/<task>
-# record often fails once or twice on Windows/OneDrive with "Permission denied"; that used to
+# record often fails once or twice on Windows with a cloud-synced folder, with "Permission denied"; that used to
 # print on every run, so the prune now retries quietly and the script ends with one summary
 # line saying what, if anything, is left.
 set -uo pipefail

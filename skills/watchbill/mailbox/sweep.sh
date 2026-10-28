@@ -43,7 +43,7 @@ mail="$(cd "$(dirname "$0")" && pwd -P)"
 . "$mail/proc_lib.sh" || { echo "sweep: proc_lib.sh missing next to sweep.sh" >&2; exit 1; }
 root="$(cd "$mail/.." && pwd -P)"
 # Other spellings of the root that command lines may use: the path as given (/tmp/x is a
-# mount of C:/Users/.../Temp/x on MSYS), and the Windows forms.
+# mount of a Windows temp folder on MSYS), and the Windows forms.
 rootw="$(cd "$(dirname "$0")/.." && pwd -L)"
 if command -v cygpath >/dev/null 2>&1; then
   rootw="$rootw|$(cygpath -m "$root")|$(cygpath -m "$rootw")|$(cygpath -u "$(cygpath -m "$rootw")")"
