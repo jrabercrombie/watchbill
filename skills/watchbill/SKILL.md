@@ -13,7 +13,7 @@ mechanically. The skill is general-purpose: nothing in it is specific to one kin
 and each project decides its own exclusive resources, hooks, and runtime notes, which live in
 that project's `.agent-mail/`, never in the skill.
 
-History of changes: see CHANGELOG.md (not needed to use the skill).
+History: see the git log.
 
 ## When to use
 
@@ -167,6 +167,14 @@ The template on disk is the contract; the brief only supplies the values.
     A resource whose runs are long (a full suite, a long measurement) gets its own default
     maximum hold with a `<resource> max=<seconds>` line in `resources.conf`, and a long
     measured run passes `--max` sized to the run when it takes the lock.
+    `--max 0` means no limit. At the maximum hold the helper stops the command's tree, runs the
+    release hook, exits 124, and writes an `ISSUE` line to the task's inbox.
+    Agents post `PROGRESS` at least every 20 minutes while holding a lock, and the controller
+    checks lock ages at every watcher re-arm and flags old holds with no progress; a silent hold
+    is indistinguishable from a hung run. To stop a locked run early, send a TERM signal to the
+    lock helper's process from the shell, never a hard kill: on some platforms the shell's
+    child processes are not in the native process tree, so they survive a hard kill and keep
+    using the resource outside the lock.
 12. **Instructions must be seen before they matter.** Agents read the reply file in the same
     shell command as every commit and before any step longer than five minutes; every
     `STATUS` and `DONE` lists the `NOTE@HH:MM` lines applied; anything mandatory goes out as a
@@ -628,7 +636,6 @@ the reason to run the skill at all, and they do not depend on how many agents th
   at run time the mailbox also holds `.watch-state`, `.watch.pid`, `locks/`, and the
   project's own `resources.conf`, `hooks/`, and optional `sweep.keep`, which never come from
   the skill)
-- `CHANGELOG.md` (history of changes; not needed to use the skill)
 - `scripts/setup.sh` (reset, `--add`, `--force`, `--update-helpers`), `scripts/cleanup.sh`
   (`--scratch`)
 - `tests/lock_run_test.sh` and `tests/sweep_test.sh` (run each with `bash tests/<name>.sh`;
