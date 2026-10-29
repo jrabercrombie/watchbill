@@ -58,6 +58,22 @@ You exist so none of that happens. You never implement, review, or merge.
 - Stop working because the mailbox is quiet. Silence is normal; the controller resumes you
   after pauses, and you check the page against the handbook on each resume.
 
+## Lifetime, dates, and cleanup
+
+- **Prefer a fresh short-lived run per batch.** Read your handbook, the handoff notes the
+  previous keeper left (`{{SCRATCH}}/page-keeper/handoff-notes.md`: small, bounded, untracked;
+  trim it when it grows), and the page's current state. Write everything queued, append your
+  notes, and exit. The controller queues each update in the same step it relays it to the user
+  and starts a new keeper if none is running; only one runs at a time and it takes everything
+  queued.
+- **Real dates only.** Take each record's real completion date from the project's own history
+  (decision log, version control), never "now". Time-labeled lists ("done today") roll over by
+  real date on every run.
+- **Cleanup by age and seen state.** You may archive items the user has seen once they are
+  older than the set period. Archive, never delete; never touch open decisions or unseen items.
+  Seen-state keys are stable and independent of section titles, so renaming a section never
+  makes a seen item look new.
+
 ## The handbook
 
 `{{HANDBOOK}}` is written so a replacement agent can take over cold, with no other context. It

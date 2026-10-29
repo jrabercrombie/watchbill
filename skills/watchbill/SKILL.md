@@ -15,6 +15,21 @@ that project's `.agent-mail/`, never in the skill.
 
 ## Changelog
 
+- **2026-10-28, page keeper lessons**: four additions. (1) **Fresh helper per batch**: a
+  long-running relay helper re-reads its whole growing history on every wake, so its cost grows
+  with its age; prefer a fresh short-lived helper per batch of updates that reads its handbook,
+  the previous helper's handoff notes (a small, bounded, untracked notes file) and the target's
+  current state, writes, appends its notes, and exits. (2) **The trigger moves to the
+  controller**: with no standing helper nothing watches for updates, so each time the controller
+  relays a meaningful update to the user, the same update goes into the helper's queue in the
+  same step, and if none is running the controller starts one at once (one at a time; it takes
+  everything queued); otherwise the target silently falls behind. (3) **Real dates only**: a
+  brief that sets dates on records takes each record's real completion date from the project's
+  own history (decision log, version control), never "now", and time-labeled lists ("done
+  today") roll over by real date on every run. (4) **Cleanup by age and seen state**: a helper
+  may archive items the user has seen once older than a set period; it archives, never deletes,
+  and never touches open decisions or unseen items; seen-state keys are stable and independent
+  of section titles, so renaming a section never makes a seen item look new.
 - **2026-10-28, later**: eleven additions from the same runs. (e) **Use it like a user**: for any
   change a user will see or touch, the implementer exercises it in the real running product, in
   its normal context, beyond tests and captures, and reports a short honest note of what it did
@@ -575,6 +590,27 @@ page on every event: agent
 
 **It never** makes decisions, picks, or default changes, and never writes as the user. A pick
 on the page is the user's; the keeper records only what the user actually chose.
+
+**Fresh helper per batch (preferred over a standing keeper).** A long-running keeper re-reads
+its whole growing history on every wake, so its cost grows with its age. Prefer a fresh,
+short-lived keeper per batch of updates: it reads its handbook, the handoff notes the previous
+keeper left (a small, bounded, untracked notes file), and the page's current state; it writes,
+appends its own notes, and exits.
+
+**The trigger is the controller's.** With no standing keeper there is no watcher to notice
+updates. Every time the controller relays a meaningful update to the user, the same update goes
+into the keeper's queue in the same step. If no keeper is running, the controller starts one at
+once. Only one runs at a time, and it takes everything queued. Without this step the page falls
+behind silently.
+
+**Real dates only.** Any brief that sets dates on records takes each record's real completion
+date from the project's own history (decision log, version control), never "now". Lists labeled
+by time ("done today") roll over by real date on every run.
+
+**Cleanup by age and seen state.** A keeper may archive items the user has seen once they are
+older than a set period. It archives, never deletes, and never touches open decisions or unseen
+items. Keys for seen state are stable and independent of section titles, so renaming a section
+never makes a seen item look new.
 
 **Stopping the keeper's watcher:** the keeper ends the watcher's whole process tree and
 verifies by listing processes that none is left (a stopped monitor leaves its `timeout` and
